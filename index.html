@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GraphLab Studio</title>
+    <meta name="theme-color" content="#13a89e" />
+    <meta name="application-name" content="GraphLab Studio" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon-180.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">GL</div>
+          <div>
+            <h1>GraphLab Studio</h1>
+            <p>Science graph workspace</p>
+          </div>
+        </div>
+
+        <section class="control-section">
+          <label for="streamSelect">Stream</label>
+          <select id="streamSelect">
+            <option value="math">Mathematics</option>
+            <option value="physics">Physics</option>
+            <option value="electrical">Electrical Engineering</option>
+            <option value="science">General Science</option>
+            <option value="data">Data Analysis</option>
+          </select>
+        </section>
+
+        <section class="control-section">
+          <span class="field-label">Theme</span>
+          <div class="theme-grid" aria-label="Theme presets">
+            <button class="theme-swatch active" type="button" data-theme="light">
+              Light
+            </button>
+            <button class="theme-swatch" type="button" data-theme="dark">
+              Dark
+            </button>
+            <button class="theme-swatch" type="button" data-theme="pink">
+              Pink
+            </button>
+            <button class="theme-swatch" type="button" data-theme="mint">
+              Mint
+            </button>
+          </div>
+          <div class="color-grid">
+            <label>
+              Theme colour
+              <input id="themeColor" type="color" value="#13a89e" />
+            </label>
+            <label>
+              Cursor
+              <input id="cursorColor" type="color" value="#172033" />
+            </label>
+            <label>
+              Values
+              <input id="valueColor" type="color" value="#172033" />
+            </label>
+          </div>
+        </section>
+
+        <section class="control-section">
+          <label for="promptInput">Graph request</label>
+          <textarea
+            id="promptInput"
+            rows="3"
+            placeholder="Example: plot y = sin(x) + 0.4x from -10 to 10"
+          ></textarea>
+          <button class="secondary-button" id="interpretButton" type="button">
+            Interpret request
+          </button>
+        </section>
+
+        <section class="control-section">
+          <span class="field-label">Graph type</span>
+          <div class="segmented" role="tablist" aria-label="Graph type">
+            <button class="segment active" type="button" data-mode="equation">
+              Equation
+            </button>
+            <button class="segment" type="button" data-mode="parametric">
+              Parametric
+            </button>
+            <button class="segment" type="button" data-mode="vector">
+              Vector
+            </button>
+            <button class="segment" type="button" data-mode="phasor">
+              Phasor
+            </button>
+            <button class="segment" type="button" data-mode="scatter">
+              Scatter
+            </button>
+            <button class="segment" type="button" data-mode="bar">
+              Bar
+            </button>
+          </div>
+        </section>
+
+        <section class="control-section mode-fields active" data-fields="equation">
+          <label for="equationInput">Equation</label>
+          <input id="equationInput" value="sin(x) + 0.35*x" />
+          <div class="range-grid">
+            <label>
+              x min
+              <input id="xMin" type="number" value="-10" step="0.5" />
+            </label>
+            <label>
+              x max
+              <input id="xMax" type="number" value="10" step="0.5" />
+            </label>
+          </div>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="parametric">
+          <label for="paramXInput">x(t)</label>
+          <input id="paramXInput" value="4*cos(t)" />
+          <label for="paramYInput">y(t)</label>
+          <input id="paramYInput" value="2*sin(t)" />
+          <div class="range-grid">
+            <label>
+              t min
+              <input id="tMin" type="number" value="0" step="0.5" />
+            </label>
+            <label>
+              t max
+              <input id="tMax" type="number" value="6.28" step="0.5" />
+            </label>
+          </div>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="vector">
+          <label for="vectorInput">Vectors: name, x, y, color</label>
+          <textarea id="vectorInput" rows="5">Force A,4,3,#1f9bd1
+Force B,-2,5,#f97316
+Velocity,5,-2,#16a34a</textarea>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="phasor">
+          <label for="phasorInput">Phasors: name, magnitude, angle, color</label>
+          <textarea id="phasorInput" rows="5">Voltage,230,0,#ef4444
+Current,8,-35,#2563eb
+Flux,120,70,#16a34a</textarea>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="scatter">
+          <label for="scatterInput">Points: x, y</label>
+          <textarea id="scatterInput" rows="5">0,1
+1,2.1
+2,2.8
+3,4.4
+4,5.2
+5,7.1</textarea>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="bar">
+          <label for="barInput">Bars: label, value, color</label>
+          <textarea id="barInput" rows="5">Algebra,86,#1f9bd1
+Mechanics,74,#f97316
+Circuits,92,#16a34a
+Optics,68,#a855f7</textarea>
+        </section>
+
+        <div class="button-row">
+          <button class="primary-button" id="plotButton" type="button">
+            Plot graph
+          </button>
+          <button class="ghost-button" id="resetButton" type="button">Reset</button>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p id="modeEyebrow">Mathematics / Equation</p>
+            <h2 id="graphTitle">y = sin(x) + 0.35*x</h2>
+          </div>
+          <div class="topbar-actions">
+            <div class="status-strip" id="statusStrip"></div>
+            <button class="install-button" id="installButton" type="button" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M12 3v8m0 0 3-3m-3 3-3-3M6 13v5h12v-5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.8"
+                />
+              </svg>
+              <span>Install</span>
+            </button>
+          </div>
+        </header>
+
+        <section class="plot-area">
+          <div class="plot-frame">
+            <canvas id="plotCanvas" aria-label="Generated graph"></canvas>
+            <div class="canvas-error" id="canvasError" hidden></div>
+          </div>
+          <div class="legend" id="legend"></div>
+          <div class="cursor-panel">
+            <div class="cursor-meta">
+              <span>Cursor inspector</span>
+              <strong id="cursorValue">No graph point selected</strong>
+            </div>
+            <input
+              id="cursorSlider"
+              type="range"
+              min="0"
+              max="0"
+              value="0"
+              step="1"
+              aria-label="Graph cursor position"
+            />
+          </div>
+        </section>
+      </section>
+
+      <aside class="explain-panel">
+        <section>
+          <div class="section-heading">
+            <h3>Term Explanation</h3>
+            <span id="termCount">0 terms</span>
+          </div>
+          <div class="term-list" id="termList"></div>
+        </section>
+
+        <section>
+          <div class="section-heading">
+            <h3>Indicators</h3>
+            <span>visual</span>
+          </div>
+          <div class="indicator-list" id="indicatorList"></div>
+        </section>
+
+        <section>
+          <div class="section-heading">
+            <h3>History</h3>
+            <button class="mini-button" id="clearHistoryButton" type="button">
+              Clear
+            </button>
+          </div>
+          <div class="history-list" id="historyList"></div>
+        </section>
+
+        <section>
+          <div class="section-heading">
+            <h3>Examples</h3>
+            <span id="exampleStream">math</span>
+          </div>
+          <div class="example-list" id="exampleList"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').then(registration => {
+            console.log('SW registered: ', registration);
+          }).catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
