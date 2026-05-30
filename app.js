@@ -192,7 +192,11 @@ const els = {
 function compileExpression(expression, variableName = "x") {
   if (typeof math !== "undefined") {
     try {
-      const compiled = math.compile(expression);
+      let cleanedExpr = expression
+        .replace(/\bcosec\b/g, 'csc')
+        .replace(/\bcotan\b/g, 'cot')
+        .replace(/\bsecant\b/g, 'sec');
+      const compiled = math.compile(cleanedExpr);
       return (value) => {
         try {
           const result = compiled.evaluate({ [variableName]: value, i: math.complex(0, 1) });
