@@ -11,7 +11,8 @@
     "appId": "com.graphlab.studio",
     "productName": "GraphLab Studio",
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": false,

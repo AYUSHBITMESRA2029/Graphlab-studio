@@ -193,13 +193,39 @@ function compileExpression(expression, variableName = "x") {
   if (typeof math !== "undefined") {
     try {
       let cleanedExpr = expression
-        .replace(/\bcosec\b/g, 'csc')
-        .replace(/\bcotan\b/g, 'cot')
-        .replace(/\bsecant\b/g, 'sec');
+        .replace(/\bcosec\b/gi, 'csc')
+        .replace(/\bcotan\b/gi, 'cot')
+        .replace(/\bsecant\b/gi, 'sec')
+        .replace(/\barcsin\b/gi, 'asin')
+        .replace(/\barccos\b/gi, 'acos')
+        .replace(/\barctan\b/gi, 'atan')
+        .replace(/\barccsc\b/gi, 'acsc')
+        .replace(/\barcsec\b/gi, 'asec')
+        .replace(/\barccot\b/gi, 'acot')
+        .replace(/sin\^-1/gi, 'asin')
+        .replace(/cos\^-1/gi, 'acos')
+        .replace(/tan\^-1/gi, 'atan')
+        .replace(/csc\^-1/gi, 'acsc')
+        .replace(/sec\^-1/gi, 'asec')
+        .replace(/cot\^-1/gi, 'acot')
+        .replace(/\[/g, 'floor(')
+        .replace(/\]/g, ')')
+        .replace(/\{/g, 'frac(')
+        .replace(/\}/g, ')');
+
+      while (/\|([^|]+)\|/.test(cleanedExpr)) {
+        cleanedExpr = cleanedExpr.replace(/\|([^|]+)\|/g, 'abs($1)');
+      }
+
       const compiled = math.compile(cleanedExpr);
       return (value) => {
         try {
-          const result = compiled.evaluate({ [variableName]: value, i: math.complex(0, 1) });
+          const result = compiled.evaluate({ 
+            [variableName]: value, 
+            i: math.complex(0, 1),
+            frac: (v) => v - Math.floor(v),
+            gif: Math.floor
+          });
           // If result is complex, we return it as an object {re, im} or handle it.
           // For now, if we expect a real number, we return it if it's purely real, else we can return the complex object.
           if (result && result.isComplex) {
@@ -219,9 +245,33 @@ function compileExpression(expression, variableName = "x") {
   // Fallback to naive parser if math.js is not loaded
   let source = expression.trim();
   source = source.replace(/^y\s*=/i, "").replace(/^x\s*\(\s*t\s*\)\s*=/i, "").replace(/^y\s*\(\s*t\s*\)\s*=/i, "").toLowerCase();
+  
+  source = source.replace(/\barcsin\b/g, 'asin')
+        .replace(/\barccos\b/g, 'acos')
+        .replace(/\barctan\b/g, 'atan')
+        .replace(/\barccsc\b/g, 'acsc')
+        .replace(/\barcsec\b/g, 'asec')
+        .replace(/\barccot\b/g, 'acot')
+        .replace(/sin\^-1/g, 'asin')
+        .replace(/cos\^-1/g, 'acos')
+        .replace(/tan\^-1/g, 'atan')
+        .replace(/csc\^-1/g, 'acsc')
+        .replace(/sec\^-1/g, 'asec')
+        .replace(/cot\^-1/g, 'acot')
+        .replace(/\[/g, 'floor(')
+        .replace(/\]/g, ')')
+        .replace(/\{/g, 'frac(')
+        .replace(/\}/g, ')');
+
+  while (/\|([^|]+)\|/.test(source)) {
+    source = source.replace(/\|([^|]+)\|/g, 'abs($1)');
+  }
+
   source = source.replace(/\s+/g, "").replace(/(\d)([xt])/g, "$1*$2").replace(/([xt])(\d)/g, "$1*$2").replace(/\^/g, "**");
   if (!/^[0-9xt+\-*/().,a-z]*$/.test(source)) throw new Error("Use numbers, x or t, operators, and supported functions.");
   source = source.replace(/\b(sin|cos|tan|asin|acos|atan|sqrt|abs|log|ln|exp|floor|ceil|round|min|max|pow)\b/g, (fn) => (fn === "ln" ? "Math.log" : `Math.${fn}`));
+  source = source.replace(/\b(gif)\b/g, "Math.floor");
+  source = source.replace(/\b(frac)\b/g, "(v=>v-Math.floor(v))");
   source = source.replace(/\bpi\b/g, "Math.PI").replace(/\be\b/g, "Math.E");
   if (/[a-z_]/i.test(source.replace(/Math\.[a-z]+/g, "").replace(/[xt]/g, ""))) throw new Error("Unknown term found in the expression.");
   const runner = new Function(variableName, `return ${source};`);
@@ -559,7 +609,12 @@ function explainEquation(expr, xMin, xMax) {
     },
   ];
 
-  if (normalized.includes("sin") || normalized.includes("cos") || normalized.includes("tan")) {
+  if (normalized.includes("asin") || normalized.includes("acos") || normalized.includes("atan") || normalized.includes("arcsin") || normalized.includes("arccos") || normalized.includes("arctan") || normalized.includes("sin^-1") || normalized.includes("cos^-1") || normalized.includes("tan^-1")) {
+    terms.push({
+      name: "inverse trigonometric",
+      text: "Calculates the angle from a given trigonometric ratio. Helpful for reversing wave functions.",
+    });
+  } else if (normalized.includes("sin") || normalized.includes("cos") || normalized.includes("tan") || normalized.includes("sec") || normalized.includes("csc") || normalized.includes("cot")) {
     terms.push({
       name: "trigonometric term",
       text: "Creates periodic wave behavior, useful for oscillation, AC signals, light, and circular motion.",
@@ -593,6 +648,24 @@ function explainEquation(expr, xMin, xMax) {
     terms.push({
       name: "coefficient",
       text: "A number multiplying x changes steepness and stretches or compresses the curve.",
+    });
+  }
+  if (normalized.includes("floor") || normalized.includes("[") || normalized.includes("gif")) {
+    terms.push({
+      name: "greatest integer (floor)",
+      text: "Rounds the value down to the nearest integer, creating a step-like pattern.",
+    });
+  }
+  if (normalized.includes("frac") || normalized.includes("{")) {
+    terms.push({
+      name: "fractional part",
+      text: "Extracts the decimal part of a number, creating a repeating sawtooth pattern.",
+    });
+  }
+  if (normalized.includes("abs") || normalized.includes("|")) {
+    terms.push({
+      name: "absolute value (modulus)",
+      text: "Removes negative signs, folding the negative parts of the graph upwards.",
     });
   }
   return terms;
