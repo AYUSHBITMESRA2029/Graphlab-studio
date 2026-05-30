@@ -19,7 +19,7 @@
       "allowToChangeInstallationDirectory": true
     },
     "directories": {
-      "output": "dist"
+      "output": "build3"
     }
   },
   "author": "",

@@ -44,6 +44,12 @@ const examples = {
       request: "parametric x(t)=4*cos(t), y(t)=2*sin(t)",
       fields: { paramX: "4*cos(t)", paramY: "2*sin(t)", tMin: "0", tMax: "6.28" },
     },
+    {
+      title: "Rose curve",
+      mode: "polar",
+      request: "polar r = 4 * sin(3*theta)",
+      fields: { polar: "4 * sin(3*theta)", thetaMin: "0", thetaMax: "6.28" },
+    },
   ],
   physics: [
     {
@@ -63,6 +69,12 @@ const examples = {
       mode: "scatter",
       request: "scatter data with a trend line",
       fields: { scatter: "0,0.5\n1,2.2\n2,4.1\n3,6.2\n4,7.9\n5,10.3" },
+    },
+    {
+      title: "Argand Diagram",
+      mode: "complex",
+      request: "plot complex numbers and their resultant",
+      fields: { complex: "z1 = 4 + 3i\nz2 = 2 * exp(i * pi / 4)\nResultant = z1 + z2" },
     },
   ],
   electrical: [
@@ -103,6 +115,12 @@ const examples = {
       mode: "scatter",
       request: "scatter data for measured values",
       fields: { scatter: "1,1.2\n2,2.9\n3,3.7\n4,5.1\n5,5.9\n6,7.4" },
+    },
+    {
+      title: "Exponential semilog",
+      mode: "semilog",
+      request: "semilog y = 10^x",
+      fields: { semilog: "10^x", semiXMin: "-2", semiXMax: "3" },
     },
   ],
   data: [
@@ -146,6 +164,13 @@ const els = {
   phasorInput: document.getElementById("phasorInput"),
   scatterInput: document.getElementById("scatterInput"),
   barInput: document.getElementById("barInput"),
+  polarInput: document.getElementById("polarInput"),
+  thetaMin: document.getElementById("thetaMin"),
+  thetaMax: document.getElementById("thetaMax"),
+  semilogInput: document.getElementById("semilogInput"),
+  semiXMin: document.getElementById("semiXMin"),
+  semiXMax: document.getElementById("semiXMax"),
+  complexInput: document.getElementById("complexInput"),
   graphTitle: document.getElementById("graphTitle"),
   modeEyebrow: document.getElementById("modeEyebrow"),
   statusStrip: document.getElementById("statusStrip"),
@@ -165,30 +190,36 @@ const els = {
 };
 
 function compileExpression(expression, variableName = "x") {
+  if (typeof math !== "undefined") {
+    try {
+      const compiled = math.compile(expression);
+      return (value) => {
+        try {
+          const result = compiled.evaluate({ [variableName]: value, i: math.complex(0, 1) });
+          // If result is complex, we return it as an object {re, im} or handle it.
+          // For now, if we expect a real number, we return it if it's purely real, else we can return the complex object.
+          if (result && result.isComplex) {
+            return result;
+          }
+          if (!Number.isFinite(Number(result))) return null;
+          return Number(result);
+        } catch {
+          return null;
+        }
+      };
+    } catch {
+      throw new Error("Invalid mathematical expression. Use numbers, variables, and supported functions.");
+    }
+  }
+
+  // Fallback to naive parser if math.js is not loaded
   let source = expression.trim();
-  source = source.replace(/^y\s*=/i, "");
-  source = source.replace(/^x\s*\(\s*t\s*\)\s*=/i, "");
-  source = source.replace(/^y\s*\(\s*t\s*\)\s*=/i, "");
-  source = source.toLowerCase();
-  source = source.replace(/\s+/g, "");
-  source = source.replace(/(\d)([xt])/g, "$1*$2");
-  source = source.replace(/([xt])(\d)/g, "$1*$2");
-  source = source.replace(/\^/g, "**");
-
-  if (!/^[0-9xt+\-*/().,a-z]*$/.test(source)) {
-    throw new Error("Use numbers, x or t, operators, and supported functions.");
-  }
-
-  source = source.replace(
-    /\b(sin|cos|tan|asin|acos|atan|sqrt|abs|log|ln|exp|floor|ceil|round|min|max|pow)\b/g,
-    (fn) => (fn === "ln" ? "Math.log" : `Math.${fn}`)
-  );
+  source = source.replace(/^y\s*=/i, "").replace(/^x\s*\(\s*t\s*\)\s*=/i, "").replace(/^y\s*\(\s*t\s*\)\s*=/i, "").toLowerCase();
+  source = source.replace(/\s+/g, "").replace(/(\d)([xt])/g, "$1*$2").replace(/([xt])(\d)/g, "$1*$2").replace(/\^/g, "**");
+  if (!/^[0-9xt+\-*/().,a-z]*$/.test(source)) throw new Error("Use numbers, x or t, operators, and supported functions.");
+  source = source.replace(/\b(sin|cos|tan|asin|acos|atan|sqrt|abs|log|ln|exp|floor|ceil|round|min|max|pow)\b/g, (fn) => (fn === "ln" ? "Math.log" : `Math.${fn}`));
   source = source.replace(/\bpi\b/g, "Math.PI").replace(/\be\b/g, "Math.E");
-
-  if (/[a-z_]/i.test(source.replace(/Math\.[a-z]+/g, "").replace(/[xt]/g, ""))) {
-    throw new Error("Unknown term found in the expression.");
-  }
-
+  if (/[a-z_]/i.test(source.replace(/Math\.[a-z]+/g, "").replace(/[xt]/g, ""))) throw new Error("Unknown term found in the expression.");
   const runner = new Function(variableName, `return ${source};`);
   return (value) => {
     const result = Number(runner(value));
@@ -256,13 +287,31 @@ function drawGrid(ctx, width, height, pad, mapper, options = {}) {
   ctx.font = "12px Segoe UI, sans-serif";
   ctx.fillStyle = theme.tick;
 
-  const xStep = chooseStep(xMin, xMax);
-  const yStep = chooseStep(yMin, yMax);
+  let xStep = chooseStep(xMin, xMax);
+  let yStep = chooseStep(yMin, yMax);
+  if (options.square) {
+    xStep = yStep = Math.min(xStep, yStep);
+  }
   const startX = Math.ceil(xMin / xStep) * xStep;
   const startY = Math.ceil(yMin / yStep) * yStep;
 
   for (let x = startX; x <= xMax + xStep * 0.5; x += xStep) {
     const px = mapper.toX(x);
+    // Draw minor grid lines for X
+    ctx.strokeStyle = theme.grid;
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = 1;
+    const minorStepX = xStep / 5;
+    for (let m = 1; m < 5; m++) {
+      const mx = x + m * minorStepX;
+      if (mx <= xMax) {
+        const pmx = mapper.toX(mx);
+        ctx.beginPath(); ctx.moveTo(pmx, pad); ctx.lineTo(pmx, height - pad); ctx.stroke();
+      }
+    }
+    
+    // Draw major grid line
+    ctx.globalAlpha = 1.0;
     ctx.beginPath();
     ctx.moveTo(px, pad);
     ctx.lineTo(px, height - pad);
@@ -272,11 +321,39 @@ function drawGrid(ctx, width, height, pad, mapper, options = {}) {
 
   for (let y = startY; y <= yMax + yStep * 0.5; y += yStep) {
     const py = mapper.toY(y);
+    
+    // Draw minor grid lines for Y
+    ctx.strokeStyle = theme.grid;
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = 1;
+    if (options.semilog) {
+      // In semilog, y is logarithmic. Minor lines are at Math.log10(m * 10^y)
+      for (let m = 2; m < 10; m++) {
+        const my = y + Math.log10(m);
+        if (my <= yMax) {
+          const pmy = mapper.toY(my);
+          ctx.beginPath(); ctx.moveTo(pad, pmy); ctx.lineTo(width - pad, pmy); ctx.stroke();
+        }
+      }
+    } else {
+      const minorStepY = yStep / 5;
+      for (let m = 1; m < 5; m++) {
+        const my = y + m * minorStepY;
+        if (my <= yMax) {
+          const pmy = mapper.toY(my);
+          ctx.beginPath(); ctx.moveTo(pad, pmy); ctx.lineTo(width - pad, pmy); ctx.stroke();
+        }
+      }
+    }
+
+    // Draw major grid line
+    ctx.globalAlpha = 1.0;
     ctx.beginPath();
     ctx.moveTo(pad, py);
     ctx.lineTo(width - pad, py);
     ctx.stroke();
-    if (Math.abs(y) > yStep / 1000) ctx.fillText(formatNumber(y), 10, py - 4);
+    let labelText = options.semilog ? "10^" + Math.round(y) : formatNumber(y);
+    if (Math.abs(y) > yStep / 1000 || options.semilog) ctx.fillText(labelText, 10, py - 4);
   }
 
   ctx.strokeStyle = theme.axis;
@@ -325,48 +402,74 @@ function plotEquation() {
   if (!(xMin < xMax)) throw new Error("x min must be smaller than x max.");
 
   const fn = compileExpression(expr, "x");
-  const samples = [];
+  const samplesReal = [];
+  const samplesImag = [];
   const count = 720;
+  let hasImaginary = false;
+
   for (let i = 0; i <= count; i++) {
     const x = xMin + ((xMax - xMin) * i) / count;
     const y = fn(x);
-    if (y === null || Math.abs(y) > 1e6) {
-      samples.push({ x, y: null });
-    } else {
-      samples.push({ x, y });
+    let re = null;
+    let im = null;
+    
+    if (y !== null) {
+      if (typeof y === "number") {
+        re = Math.abs(y) > 1e6 ? null : y;
+        im = null;
+      } else if (y.isComplex) {
+        re = Math.abs(y.re) > 1e6 ? null : y.re;
+        im = Math.abs(y.im) > 1e6 ? null : y.im;
+        if (im !== null && Math.abs(im) > 1e-10) hasImaginary = true;
+      }
     }
+    samplesReal.push({ x, y: re });
+    samplesImag.push({ x, y: im });
   }
 
-  const finite = samples.filter((point) => point.y !== null);
-  if (finite.length < 2) throw new Error("The equation has too few plottable values.");
-  const [yMin, yMax] = niceRange(
-    Math.min(...finite.map((point) => point.y)),
-    Math.max(...finite.map((point) => point.y))
-  );
+  const finiteReal = samplesReal.filter((p) => p.y !== null);
+  const finiteImag = samplesImag.filter((p) => p.y !== null && Math.abs(p.y) > 1e-10);
+  
+  if (finiteReal.length < 2 && finiteImag.length < 2) throw new Error("The equation has too few plottable values.");
+
+  let allFiniteY = finiteReal.map(p => p.y);
+  if (hasImaginary) allFiniteY = allFiniteY.concat(finiteImag.map(p => p.y));
+  
+  const [yMin, yMax] = niceRange(Math.min(...allFiniteY), Math.max(...allFiniteY));
 
   const canvas = setupCanvas();
   const mapper = createMapper(canvas.width, canvas.height, canvas.pad, xMin, xMax, yMin, yMax);
   drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper);
-  drawCurve(canvas.ctx, mapper, samples, "#1f9bd1", 3);
-  drawSampleDots(canvas.ctx, mapper, finite, "#f97316");
+  
+  drawCurve(canvas.ctx, mapper, samplesReal, "#1f9bd1", 3);
+  drawSampleDots(canvas.ctx, mapper, finiteReal, "#1f9bd1");
+  
+  const legend = [{ label: "Real part", color: "#1f9bd1" }];
+  let cursorPoints = buildCursorPoints(finiteReal, mapper, (p) => `x=${formatNumber(p.x)}, Re(y)=${formatNumber(p.y)}`);
+  
+  if (hasImaginary) {
+    drawCurve(canvas.ctx, mapper, samplesImag, "#f97316", 3); // Imaginary part in orange
+    legend.push({ label: "Imaginary part", color: "#f97316" });
+    cursorPoints = cursorPoints.concat(buildCursorPoints(finiteImag, mapper, (p) => `x=${formatNumber(p.x)}, Im(y)=${formatNumber(p.y)}`));
+  } else {
+    legend[0].label = "Function curve";
+    cursorPoints = buildCursorPoints(finiteReal, mapper, (p) => `x=${formatNumber(p.x)}, y=${formatNumber(p.y)}`);
+  }
 
-  const minPoint = finite.reduce((best, point) => (point.y < best.y ? point : best), finite[0]);
-  const maxPoint = finite.reduce((best, point) => (point.y > best.y ? point : best), finite[0]);
-  const intercepts = estimateXIntercepts(finite);
+  const intercepts = estimateXIntercepts(finiteReal);
 
   return {
     title: `y = ${expr.replace(/^y\s*=/i, "")}`,
-    legend: [{ label: "Function curve", color: "#1f9bd1" }, { label: "Sample points", color: "#f97316" }],
+    legend,
     indicators: [
       { label: "x domain", value: `${formatNumber(xMin)} to ${formatNumber(xMax)}` },
-      { label: "y minimum", value: `${formatNumber(minPoint.y)} at x=${formatNumber(minPoint.x)}` },
-      { label: "y maximum", value: `${formatNumber(maxPoint.y)} at x=${formatNumber(maxPoint.x)}` },
+      { label: "y bounds", value: `${formatNumber(yMin)} to ${formatNumber(yMax)}` },
       { label: "x intercepts", value: intercepts.length ? intercepts.map(formatNumber).join(", ") : "none visible" },
     ],
     terms: explainEquation(expr, xMin, xMax),
     cursor: {
       color: "#1f9bd1",
-      points: buildCursorPoints(finite, mapper, (point) => `x=${formatNumber(point.x)}, y=${formatNumber(point.y)}`),
+      points: cursorPoints,
     },
   };
 }
@@ -597,8 +700,16 @@ function plotVector() {
   const maxAbs = Math.max(1, ...all.flatMap((vector) => [Math.abs(vector.x), Math.abs(vector.y)]));
   const span = maxAbs * 1.35;
   const canvas = setupCanvas();
-  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, -span, span, -span, span);
-  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper);
+  const plotW = canvas.width - canvas.pad * 2;
+  const plotH = canvas.height - canvas.pad * 2;
+  let xSpan = span, ySpan = span;
+  if (plotW > plotH) {
+    xSpan = span * (plotW / plotH);
+  } else {
+    ySpan = span * (plotH / plotW);
+  }
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, -xSpan, xSpan, -ySpan, ySpan);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, { square: true });
 
   vectors.forEach((vector) => drawVectorArrow(canvas.ctx, mapper, vector, 3));
   drawVectorArrow(canvas.ctx, mapper, result, 4, true);
@@ -611,6 +722,55 @@ function plotVector() {
     label: "Resultant",
     value: `${formatNumber(vectorMagnitude(result))} at ${formatNumber(vectorAngle(result))} deg`,
   });
+
+  if (vectors.length === 1) {
+    let a1 = (vectorAngle(vectors[0]) * Math.PI) / 180;
+    if (a1 < 0) a1 += 2 * Math.PI;
+    const diffDeg = a1 * 180 / Math.PI;
+    const midAngle = a1 / 2;
+    const scale = Math.abs(mapper.toX(1) - mapper.toX(0));
+    const arcRadius = Math.max(20, vectorMagnitude(vectors[0]) * 0.3 * scale);
+    
+    canvas.ctx.save();
+    canvas.ctx.strokeStyle = "#16a34a";
+    canvas.ctx.lineWidth = 2;
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(0), mapper.toY(0), arcRadius, 0, -a1, true);
+    canvas.ctx.stroke();
+    canvas.ctx.fillStyle = canvasTheme().axis;
+    canvas.ctx.font = "600 12px Segoe UI, sans-serif";
+    canvas.ctx.fillText(formatNumber(diffDeg) + "°", mapper.toX(0) + (arcRadius + 16) * Math.cos(midAngle) - 10, mapper.toY(0) - (arcRadius + 16) * Math.sin(midAngle) + 4);
+    canvas.ctx.restore();
+  } else if (vectors.length >= 2) {
+    let a1 = (vectorAngle(vectors[0]) * Math.PI) / 180;
+    let a2 = (vectorAngle(vectors[1]) * Math.PI) / 180;
+    if (a1 < 0) a1 += 2 * Math.PI;
+    if (a2 < 0) a2 += 2 * Math.PI;
+    let diff = Math.abs(a1 - a2);
+    let startAngle = Math.min(a1, a2);
+    let endAngle = Math.max(a1, a2);
+    if (diff > Math.PI) {
+      diff = 2 * Math.PI - diff;
+      startAngle = Math.max(a1, a2);
+      endAngle = Math.min(a1, a2) + 2 * Math.PI;
+    }
+    const diffDeg = diff * 180 / Math.PI;
+    indicators.push({ label: `angle (${vectors[0].label}, ${vectors[1].label})`, value: formatNumber(diffDeg) + " deg" });
+    
+    const midAngle = startAngle + diff / 2;
+    const scale = Math.abs(mapper.toX(1) - mapper.toX(0));
+    const arcRadius = Math.max(20, Math.min(vectorMagnitude(vectors[0]), vectorMagnitude(vectors[1])) * 0.3 * scale);
+    canvas.ctx.save();
+    canvas.ctx.strokeStyle = "#16a34a";
+    canvas.ctx.lineWidth = 2;
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(0), mapper.toY(0), arcRadius, -startAngle, -endAngle, true);
+    canvas.ctx.stroke();
+    canvas.ctx.fillStyle = canvasTheme().axis;
+    canvas.ctx.font = "600 12px Segoe UI, sans-serif";
+    canvas.ctx.fillText(formatNumber(diffDeg) + "°", mapper.toX(0) + (arcRadius + 16) * Math.cos(midAngle) - 10, mapper.toY(0) - (arcRadius + 16) * Math.sin(midAngle) + 4);
+    canvas.ctx.restore();
+  }
 
   return {
     title: "Vector representation",
@@ -963,6 +1123,235 @@ function buildBarCursorPoints(bars, mapper) {
   return points;
 }
 
+function plotPolar() {
+  const expr = els.polarInput.value.trim();
+  const tMin = Number(els.thetaMin.value);
+  const tMax = Number(els.thetaMax.value);
+  if (!(tMin < tMax)) throw new Error("θ min must be smaller than θ max.");
+  const fn = compileExpression(expr, "theta");
+  const points = [];
+  const count = 720;
+  for (let i = 0; i <= count; i++) {
+    const t = tMin + ((tMax - tMin) * i) / count;
+    const r = fn(t);
+    if (r === null || Math.abs(r) > 1e6) {
+      points.push({ x: null, y: null, t, r: null });
+    } else {
+      points.push({ x: r * Math.cos(t), y: r * Math.sin(t), t, r });
+    }
+  }
+  const finite = points.filter(p => p.x !== null);
+  if (finite.length < 2) throw new Error("Too few plottable values.");
+  const maxSpan = Math.max(
+    Math.abs(Math.min(...finite.map(p => p.x))),
+    Math.abs(Math.max(...finite.map(p => p.x))),
+    Math.abs(Math.min(...finite.map(p => p.y))),
+    Math.abs(Math.max(...finite.map(p => p.y)))
+  ) * 1.1;
+  const canvas = setupCanvas();
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, -maxSpan, maxSpan, -maxSpan, maxSpan);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper);
+  drawCurve(canvas.ctx, mapper, finite, "#d9468f", 3);
+  return {
+    title: `r = ${expr}`,
+    legend: [{ label: "Polar curve", color: "#d9468f" }],
+    indicators: [
+      { label: "θ span", value: `${formatNumber(tMin)} to ${formatNumber(tMax)}` },
+      { label: "max radius", value: formatNumber(Math.max(...finite.map(p => Math.abs(p.r)))) }
+    ],
+    terms: [
+      { name: "Polar coordinates", text: "Plots points by distance from center (r) and angle (θ)." }
+    ],
+    cursor: {
+      color: "#d9468f",
+      points: buildCursorPoints(finite, mapper, p => `θ=${formatNumber(p.t)}, r=${formatNumber(p.r)}`)
+    }
+  };
+}
+
+function plotSemilog() {
+  const expr = els.semilogInput.value.trim();
+  const xMin = Number(els.semiXMin.value);
+  const xMax = Number(els.semiXMax.value);
+  if (!(xMin < xMax)) throw new Error("x min must be smaller than x max.");
+  const fn = compileExpression(expr, "x");
+  const points = [];
+  const count = 720;
+  for (let i = 0; i <= count; i++) {
+    const x = xMin + ((xMax - xMin) * i) / count;
+    const y = fn(x);
+    if (y !== null && y > 0 && Math.abs(y) < 1e12) {
+      points.push({ x, y: Math.log10(y), origY: y });
+    } else {
+      points.push({ x, y: null });
+    }
+  }
+  const finite = points.filter(p => p.y !== null);
+  if (finite.length < 2) throw new Error("Values must be strictly positive for log scale.");
+  const [yMin, yMax] = niceRange(Math.min(...finite.map(p => p.y)), Math.max(...finite.map(p => p.y)));
+  const canvas = setupCanvas();
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, xMin, xMax, yMin, yMax);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, { semilog: true });
+  drawCurve(canvas.ctx, mapper, finite, "#0d9488", 3);
+  return {
+    title: `y = ${expr} (Semilog)`,
+    legend: [{ label: "Log curve", color: "#0d9488" }],
+    indicators: [
+      { label: "x domain", value: `${formatNumber(xMin)} to ${formatNumber(xMax)}` },
+      { label: "y range", value: `10^${formatNumber(yMin)} to 10^${formatNumber(yMax)}` }
+    ],
+    terms: [
+      { name: "Semilog scale", text: "Y-axis increases by powers of 10, transforming exponential curves into straight lines." }
+    ],
+    cursor: {
+      color: "#0d9488",
+      points: buildCursorPoints(finite, mapper, p => `x=${formatNumber(p.x)}, y=${formatNumber(p.origY)}`)
+    }
+  };
+}
+
+function plotComplex() {
+  const lines = els.complexInput.value.split('\n').filter(line => line.trim());
+  if (lines.length === 0) throw new Error("Please enter at least one complex expression.");
+  if (typeof math === "undefined") throw new Error("math.js is not loaded.");
+
+  const points = [];
+  const scope = { i: math.complex(0, 1) };
+  
+  lines.forEach((line, index) => {
+    let name = `z${index + 1}`;
+    let expr = line;
+    if (line.includes('=')) {
+      const parts = line.split('=');
+      name = parts[0].trim();
+    }
+    
+    try {
+      const result = math.evaluate(line, scope);
+      if (result !== undefined && result !== null) {
+        if (typeof result === "number") {
+          points.push({ label: name, re: result, im: 0, color: palette[points.length % palette.length] });
+        } else if (result.isComplex) {
+          points.push({ label: name, re: result.re, im: result.im, color: palette[points.length % palette.length] });
+        } else if (result.entries) {
+          // It's an array/matrix
+        }
+      }
+    } catch (e) {
+      // Ignore evaluation errors on partial lines while typing
+    }
+  });
+
+  if (points.length === 0) throw new Error("No valid complex numbers found.");
+
+  const allVals = points.flatMap(p => [p.re, p.im]);
+  const maxVal = Math.max(0.1, ...allVals.map(Math.abs)) * 1.2;
+
+  const canvas = setupCanvas();
+  const plotW = canvas.width - canvas.pad * 2;
+  const plotH = canvas.height - canvas.pad * 2;
+  let xSpan = maxVal, ySpan = maxVal;
+  if (plotW > plotH) {
+    xSpan = maxVal * (plotW / plotH);
+  } else {
+    ySpan = maxVal * (plotH / plotW);
+  }
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, -xSpan, xSpan, -ySpan, ySpan);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, { xLabel: "Real", yLabel: "Imaginary", square: true });
+  
+  const center = { x: mapper.toX(0), y: mapper.toY(0) };
+  
+  points.forEach((point) => {
+    drawPolarArrow(canvas.ctx, center, {
+      x: point.re,
+      y: point.im,
+      color: point.color,
+      label: point.label
+    }, Math.abs(mapper.toX(1) - mapper.toX(0)), 3, false);
+  });
+
+  const indicators = [
+    { label: "vectors plotted", value: String(points.length) },
+    { label: "max magnitude", value: formatNumber(Math.max(...points.map(p => Math.sqrt(p.re*p.re + p.im*p.im)))) }
+  ];
+
+  if (points.length === 1) {
+    const p1 = points[0];
+    let a1 = Math.atan2(p1.im, p1.re);
+    if (a1 < 0) a1 += 2 * Math.PI;
+    const diffDeg = a1 * 180 / Math.PI;
+    indicators.push({ label: `angle (${p1.label})`, value: formatNumber(diffDeg) + " deg" });
+    
+    const midAngle = a1 / 2;
+    const scale = Math.abs(mapper.toX(1) - mapper.toX(0));
+    const arcRadius = Math.max(20, Math.hypot(p1.re, p1.im) * 0.3 * scale);
+    
+    canvas.ctx.save();
+    canvas.ctx.strokeStyle = "#16a34a";
+    canvas.ctx.lineWidth = 2;
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(center.x, center.y, arcRadius, 0, -a1, true);
+    canvas.ctx.stroke();
+    
+    canvas.ctx.fillStyle = canvasTheme().axis;
+    canvas.ctx.font = "600 12px Segoe UI, sans-serif";
+    const textX = center.x + (arcRadius + 16) * Math.cos(midAngle);
+    const textY = center.y - (arcRadius + 16) * Math.sin(midAngle);
+    canvas.ctx.fillText(formatNumber(diffDeg) + "°", textX - 10, textY + 4);
+    canvas.ctx.restore();
+  } else if (points.length >= 2) {
+    const p1 = points[0];
+    const p2 = points[1];
+    let a1 = Math.atan2(p1.im, p1.re);
+    let a2 = Math.atan2(p2.im, p2.re);
+    if (a1 < 0) a1 += 2 * Math.PI;
+    if (a2 < 0) a2 += 2 * Math.PI;
+    
+    let diff = Math.abs(a1 - a2);
+    let startAngle = Math.min(a1, a2);
+    let endAngle = Math.max(a1, a2);
+    if (diff > Math.PI) {
+      diff = 2 * Math.PI - diff;
+      startAngle = Math.max(a1, a2);
+      endAngle = Math.min(a1, a2) + 2 * Math.PI;
+    }
+    const diffDeg = diff * 180 / Math.PI;
+    indicators.push({ label: `angle (${p1.label}, ${p2.label})`, value: formatNumber(diffDeg) + " deg" });
+    
+    const midAngle = startAngle + diff / 2;
+    const scale = Math.abs(mapper.toX(1) - mapper.toX(0));
+    const arcRadius = Math.max(20, Math.min(Math.hypot(p1.re, p1.im), Math.hypot(p2.re, p2.im)) * 0.3 * scale);
+    
+    canvas.ctx.save();
+    canvas.ctx.strokeStyle = "#16a34a";
+    canvas.ctx.lineWidth = 2;
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(center.x, center.y, arcRadius, -startAngle, -endAngle, true);
+    canvas.ctx.stroke();
+    
+    canvas.ctx.fillStyle = canvasTheme().axis;
+    canvas.ctx.font = "600 12px Segoe UI, sans-serif";
+    const textX = center.x + (arcRadius + 16) * Math.cos(midAngle);
+    const textY = center.y - (arcRadius + 16) * Math.sin(midAngle);
+    canvas.ctx.fillText(formatNumber(diffDeg) + "°", textX - 10, textY + 4);
+    canvas.ctx.restore();
+  }
+
+  return {
+    title: "Argand Diagram",
+    legend: points.map((p) => ({ label: p.label, color: p.color })),
+    indicators: indicators,
+    terms: [
+      { name: "Complex plane", text: "Plots the real part on the horizontal axis and imaginary part on the vertical axis." },
+      { name: "Vector", text: "A line showing magnitude and direction from the origin to the complex point." }
+    ],
+    cursor: {
+      color: "#38bdf8",
+      points: buildCursorPoints(points.map(p => ({ x: p.re, y: p.im, label: p.label })), mapper, p => `${p.label} = ${formatNumber(p.x)} ${p.y >= 0 ? '+' : '-'} ${formatNumber(Math.abs(p.y))}i`)
+    }
+  };
+}
+
 function setMode(mode) {
   state.mode = mode;
   document.querySelectorAll(".segment").forEach((button) => {
@@ -990,6 +1379,9 @@ function render() {
     if (state.mode === "phasor") result = plotPhasor();
     if (state.mode === "scatter") result = plotScatter();
     if (state.mode === "bar") result = plotBar();
+    if (state.mode === "polar") result = plotPolar();
+    if (state.mode === "semilog") result = plotSemilog();
+    if (state.mode === "complex") result = plotComplex();
     state.lastData = result;
     updateUI(result);
     setupCursorInspector(result.cursor);
@@ -1009,7 +1401,7 @@ function updateUI(result) {
   els.graphTitle.textContent = result.title;
   els.modeEyebrow.textContent = `${streamName} / ${modeName}`;
   els.statusStrip.innerHTML = result.indicators
-    .slice(0, 3)
+    .slice(0, 5)
     .map((item, index) => {
       const color = palette[index % palette.length];
       return `<span class="status-pill"><span class="dot" style="background:${color}"></span>${escapeHTML(item.label)}: ${escapeHTML(item.value)}</span>`;
@@ -1257,6 +1649,13 @@ function collectFields() {
     phasor: els.phasorInput.value,
     scatter: els.scatterInput.value,
     bar: els.barInput.value,
+    polar: els.polarInput.value,
+    thetaMin: els.thetaMin.value,
+    thetaMax: els.thetaMax.value,
+    semilog: els.semilogInput.value,
+    semiXMin: els.semiXMin.value,
+    semiXMax: els.semiXMax.value,
+    complex: els.complexInput.value,
   };
 }
 
@@ -1298,6 +1697,13 @@ function applyFields(fields = {}) {
   if (fields.phasor !== undefined) els.phasorInput.value = fields.phasor;
   if (fields.scatter !== undefined) els.scatterInput.value = fields.scatter;
   if (fields.bar !== undefined) els.barInput.value = fields.bar;
+  if (fields.polar !== undefined) els.polarInput.value = fields.polar;
+  if (fields.thetaMin !== undefined) els.thetaMin.value = fields.thetaMin;
+  if (fields.thetaMax !== undefined) els.thetaMax.value = fields.thetaMax;
+  if (fields.semilog !== undefined) els.semilogInput.value = fields.semilog;
+  if (fields.semiXMin !== undefined) els.semiXMin.value = fields.semiXMin;
+  if (fields.semiXMax !== undefined) els.semiXMax.value = fields.semiXMax;
+  if (fields.complex !== undefined) els.complexInput.value = fields.complex;
 }
 
 function restoreHistoryItem(id) {
@@ -1333,6 +1739,21 @@ function interpretRequest() {
   }
   if (lower.includes("bar") || lower.includes("chart")) {
     setMode("bar");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("polar")) {
+    setMode("polar");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("semilog") || lower.includes("log scale")) {
+    setMode("semilog");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("complex") || lower.includes("imaginary")) {
+    setMode("complex");
     recordCurrentGraph();
     return;
   }
@@ -1376,6 +1797,19 @@ function resetForMode() {
   }
   if (state.mode === "bar") {
     els.barInput.value = "Algebra,86,#1f9bd1\nMechanics,74,#f97316\nCircuits,92,#16a34a\nOptics,68,#a855f7";
+  }
+  if (state.mode === "polar") {
+    els.polarInput.value = "4 * sin(3*theta)";
+    els.thetaMin.value = "0";
+    els.thetaMax.value = "6.28";
+  }
+  if (state.mode === "semilog") {
+    els.semilogInput.value = "10^x";
+    els.semiXMin.value = "-2";
+    els.semiXMax.value = "3";
+  }
+  if (state.mode === "complex") {
+    els.complexInput.value = "z1 = 3 + 4i\nz2 = 2 * exp(i * pi / 3)\nResultant = z1 + z2";
   }
   render();
 }
@@ -1437,7 +1871,14 @@ els.valueColor.addEventListener("input", (event) => setPreferenceColor("valueCol
     els.phasorInput,
     els.scatterInput,
     els.barInput,
-  ].forEach((element) => element.addEventListener(eventName, render));
+    els.polarInput,
+    els.thetaMin,
+    els.thetaMax,
+    els.semilogInput,
+    els.semiXMin,
+    els.semiXMax,
+    els.complexInput,
+  ].forEach((element) => element && element.addEventListener(eventName, render));
 });
 
 let resizeTimer = null;
