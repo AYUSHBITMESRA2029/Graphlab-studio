@@ -2120,9 +2120,45 @@ els.canvas.addEventListener("wheel", (event) => {
   render();
 });
 
-els.canvas.parentElement.addEventListener("click", () => {
-  els.canvas.parentElement.classList.toggle("fullscreen-graph");
-  render();
+let initialPinchDistance = null;
+els.canvas.addEventListener("touchstart", (e) => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    initialPinchDistance = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  }
+}, { passive: false });
+
+els.canvas.addEventListener("touchmove", (e) => {
+  if (e.touches.length === 2 && initialPinchDistance !== null) {
+    e.preventDefault();
+    const currentDistance = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    if (Math.abs(currentDistance - initialPinchDistance) > 10) {
+      const zoomIn = currentDistance > initialPinchDistance;
+      zoomFactor *= zoomIn ? 1.05 : 0.95;
+      initialPinchDistance = currentDistance;
+      render();
+    }
+  }
+}, { passive: false });
+
+els.canvas.addEventListener("touchend", (e) => {
+  if (e.touches.length < 2) {
+    initialPinchDistance = null;
+  }
+});
+
+els.canvas.addEventListener("click", () => {
+  const plotArea = els.canvas.closest(".plot-area");
+  if (plotArea) {
+    plotArea.classList.toggle("fullscreen-graph");
+    render();
+  }
 });
 
 ["input", "change"].forEach((eventName) => {
