@@ -171,6 +171,14 @@ const els = {
   semiXMin: document.getElementById("semiXMin"),
   semiXMax: document.getElementById("semiXMax"),
   complexInput: document.getElementById("complexInput"),
+  surfaceInput: document.getElementById("surfaceInput"),
+  surfXMin: document.getElementById("surfXMin"),
+  surfXMax: document.getElementById("surfXMax"),
+  surfYMin: document.getElementById("surfYMin"),
+  surfYMax: document.getElementById("surfYMax"),
+  surfZMin: document.getElementById("surfZMin"),
+  surfZMax: document.getElementById("surfZMax"),
+  plotlyDiv: document.getElementById("plotlyDiv"),
   graphTitle: document.getElementById("graphTitle"),
   modeEyebrow: document.getElementById("modeEyebrow"),
   statusStrip: document.getElementById("statusStrip"),
@@ -189,43 +197,36 @@ const els = {
   cursorValue: document.getElementById("cursorValue"),
 };
 
+let currentAngleMode = 'rad';
+let zoomFactor = 1;
+
 function compileExpression(expression, variableName = "x") {
   if (typeof math !== "undefined") {
     try {
       let cleanedExpr = expression
-        .replace(/\bcosec\b/gi, 'csc')
-        .replace(/\bcotan\b/gi, 'cot')
-        .replace(/\bsecant\b/gi, 'sec')
-        .replace(/\barcsin\b/gi, 'asin')
-        .replace(/\barccos\b/gi, 'acos')
-        .replace(/\barctan\b/gi, 'atan')
-        .replace(/\barccsc\b/gi, 'acsc')
-        .replace(/\barcsec\b/gi, 'asec')
-        .replace(/\barccot\b/gi, 'acot')
-        .replace(/sin\^-1/gi, 'asin')
-        .replace(/cos\^-1/gi, 'acos')
-        .replace(/tan\^-1/gi, 'atan')
-        .replace(/csc\^-1/gi, 'acsc')
-        .replace(/sec\^-1/gi, 'asec')
-        .replace(/cot\^-1/gi, 'acot')
-        .replace(/\[/g, 'floor(')
-        .replace(/\]/g, ')')
-        .replace(/\{/g, 'frac(')
-        .replace(/\}/g, ')');
-
-      while (/\|([^|]+)\|/.test(cleanedExpr)) {
-        cleanedExpr = cleanedExpr.replace(/\|([^|]+)\|/g, 'abs($1)');
-      }
-
+        .replace(/\bcosec\b/g, 'csc')
+        .replace(/\bcotan\b/g, 'cot')
+        .replace(/\bsecant\b/g, 'sec');
       const compiled = math.compile(cleanedExpr);
       return (value) => {
         try {
-          const result = compiled.evaluate({ 
-            [variableName]: value, 
-            i: math.complex(0, 1),
-            frac: (v) => v - Math.floor(v),
-            gif: Math.floor
-          });
+          const scope = { [variableName]: value, i: math.complex(0, 1) };
+          if (currentAngleMode === 'deg') {
+            const rad = (x) => x * Math.PI / 180;
+            const deg = (x) => x * 180 / Math.PI;
+            Object.assign(scope, {
+              sin: (x) => math.sin(rad(x)),
+              cos: (x) => math.cos(rad(x)),
+              tan: (x) => math.tan(rad(x)),
+              csc: (x) => math.csc(rad(x)),
+              sec: (x) => math.sec(rad(x)),
+              cot: (x) => math.cot(rad(x)),
+              asin: (x) => deg(math.asin(x)),
+              acos: (x) => deg(math.acos(x)),
+              atan: (x) => deg(math.atan(x))
+            });
+          }
+          const result = compiled.evaluate(scope);
           // If result is complex, we return it as an object {re, im} or handle it.
           // For now, if we expect a real number, we return it if it's purely real, else we can return the complex object.
           if (result && result.isComplex) {
@@ -245,33 +246,9 @@ function compileExpression(expression, variableName = "x") {
   // Fallback to naive parser if math.js is not loaded
   let source = expression.trim();
   source = source.replace(/^y\s*=/i, "").replace(/^x\s*\(\s*t\s*\)\s*=/i, "").replace(/^y\s*\(\s*t\s*\)\s*=/i, "").toLowerCase();
-  
-  source = source.replace(/\barcsin\b/g, 'asin')
-        .replace(/\barccos\b/g, 'acos')
-        .replace(/\barctan\b/g, 'atan')
-        .replace(/\barccsc\b/g, 'acsc')
-        .replace(/\barcsec\b/g, 'asec')
-        .replace(/\barccot\b/g, 'acot')
-        .replace(/sin\^-1/g, 'asin')
-        .replace(/cos\^-1/g, 'acos')
-        .replace(/tan\^-1/g, 'atan')
-        .replace(/csc\^-1/g, 'acsc')
-        .replace(/sec\^-1/g, 'asec')
-        .replace(/cot\^-1/g, 'acot')
-        .replace(/\[/g, 'floor(')
-        .replace(/\]/g, ')')
-        .replace(/\{/g, 'frac(')
-        .replace(/\}/g, ')');
-
-  while (/\|([^|]+)\|/.test(source)) {
-    source = source.replace(/\|([^|]+)\|/g, 'abs($1)');
-  }
-
   source = source.replace(/\s+/g, "").replace(/(\d)([xt])/g, "$1*$2").replace(/([xt])(\d)/g, "$1*$2").replace(/\^/g, "**");
   if (!/^[0-9xt+\-*/().,a-z]*$/.test(source)) throw new Error("Use numbers, x or t, operators, and supported functions.");
   source = source.replace(/\b(sin|cos|tan|asin|acos|atan|sqrt|abs|log|ln|exp|floor|ceil|round|min|max|pow)\b/g, (fn) => (fn === "ln" ? "Math.log" : `Math.${fn}`));
-  source = source.replace(/\b(gif)\b/g, "Math.floor");
-  source = source.replace(/\b(frac)\b/g, "(v=>v-Math.floor(v))");
   source = source.replace(/\bpi\b/g, "Math.PI").replace(/\be\b/g, "Math.E");
   if (/[a-z_]/i.test(source.replace(/Math\.[a-z]+/g, "").replace(/[xt]/g, ""))) throw new Error("Unknown term found in the expression.");
   const runner = new Function(variableName, `return ${source};`);
@@ -320,13 +297,24 @@ function niceRange(min, max) {
 function createMapper(width, height, pad, xMin, xMax, yMin, yMax) {
   const plotW = width - pad * 2;
   const plotH = height - pad * 2;
+  
+  const xCenter = (xMin + xMax) / 2;
+  const xSpan = (xMax - xMin) / zoomFactor;
+  const newXMin = xCenter - xSpan / 2;
+  const newXMax = xCenter + xSpan / 2;
+
+  const yCenter = (yMin + yMax) / 2;
+  const ySpan = (yMax - yMin) / zoomFactor;
+  const newYMin = yCenter - ySpan / 2;
+  const newYMax = yCenter + ySpan / 2;
+
   return {
-    xMin,
-    xMax,
-    yMin,
-    yMax,
-    toX: (x) => pad + ((x - xMin) / (xMax - xMin)) * plotW,
-    toY: (y) => height - pad - ((y - yMin) / (yMax - yMin)) * plotH,
+    xMin: newXMin,
+    xMax: newXMax,
+    yMin: newYMin,
+    yMax: newYMax,
+    toX: (x) => pad + ((x - newXMin) / (newXMax - newXMin)) * plotW,
+    toY: (y) => height - pad - ((y - newYMin) / (newYMax - newYMin)) * plotH,
   };
 }
 
@@ -609,12 +597,7 @@ function explainEquation(expr, xMin, xMax) {
     },
   ];
 
-  if (normalized.includes("asin") || normalized.includes("acos") || normalized.includes("atan") || normalized.includes("arcsin") || normalized.includes("arccos") || normalized.includes("arctan") || normalized.includes("sin^-1") || normalized.includes("cos^-1") || normalized.includes("tan^-1")) {
-    terms.push({
-      name: "inverse trigonometric",
-      text: "Calculates the angle from a given trigonometric ratio. Helpful for reversing wave functions.",
-    });
-  } else if (normalized.includes("sin") || normalized.includes("cos") || normalized.includes("tan") || normalized.includes("sec") || normalized.includes("csc") || normalized.includes("cot")) {
+  if (normalized.includes("sin") || normalized.includes("cos") || normalized.includes("tan")) {
     terms.push({
       name: "trigonometric term",
       text: "Creates periodic wave behavior, useful for oscillation, AC signals, light, and circular motion.",
@@ -648,24 +631,6 @@ function explainEquation(expr, xMin, xMax) {
     terms.push({
       name: "coefficient",
       text: "A number multiplying x changes steepness and stretches or compresses the curve.",
-    });
-  }
-  if (normalized.includes("floor") || normalized.includes("[") || normalized.includes("gif")) {
-    terms.push({
-      name: "greatest integer (floor)",
-      text: "Rounds the value down to the nearest integer, creating a step-like pattern.",
-    });
-  }
-  if (normalized.includes("frac") || normalized.includes("{")) {
-    terms.push({
-      name: "fractional part",
-      text: "Extracts the decimal part of a number, creating a repeating sawtooth pattern.",
-    });
-  }
-  if (normalized.includes("abs") || normalized.includes("|")) {
-    terms.push({
-      name: "absolute value (modulus)",
-      text: "Removes negative signs, folding the negative parts of the graph upwards.",
     });
   }
   return terms;
@@ -1429,6 +1394,188 @@ function plotComplex() {
   };
 }
 
+function plotSurface() {
+  const expr = els.surfaceInput.value.trim();
+  const xMin = Number(els.surfXMin.value) || -5;
+  const xMax = Number(els.surfXMax.value) || 5;
+  const yMin = Number(els.surfYMin.value) || -5;
+  const yMax = Number(els.surfYMax.value) || 5;
+  const zMin = Number(els.surfZMin.value) || -5;
+  const zMax = Number(els.surfZMax.value) || 5;
+
+  if (typeof Plotly === "undefined") {
+    throw new Error("Plotly.js failed to load. Check your internet connection.");
+  }
+
+  let isImplicit = expr.includes('=');
+  let explicitZ = false;
+  let cleanExpr = expr;
+
+  if (isImplicit) {
+    const parts = expr.split('=');
+    if (parts.length === 2) {
+      const left = parts[0].trim();
+      const right = parts[1].trim();
+      if (left.toLowerCase() === 'z') {
+        isImplicit = false;
+        explicitZ = true;
+        cleanExpr = right;
+      } else if (right.toLowerCase() === 'z') {
+        isImplicit = false;
+        explicitZ = true;
+        cleanExpr = left;
+      } else {
+        cleanExpr = `(${left}) - (${right})`;
+      }
+    }
+  }
+
+  let data = [];
+  
+  if (!isImplicit) {
+    let zData = [];
+    let xData = [];
+    let yData = [];
+    
+    let compiled;
+    try {
+      let mathExpr = cleanExpr
+        .replace(/\bcosec\b/g, 'csc')
+        .replace(/\bcotan\b/g, 'cot')
+        .replace(/\bsecant\b/g, 'sec');
+      compiled = math.compile(mathExpr);
+    } catch(e) {
+      throw new Error("Invalid 3D expression. Use x and y.");
+    }
+
+    const steps = 30;
+    const xStep = (xMax - xMin) / steps;
+    const yStep = (yMax - yMin) / steps;
+
+    for (let j = 0; j <= steps; j++) {
+      let y = yMin + j * yStep;
+      yData.push(y);
+      let zRow = [];
+      for (let i = 0; i <= steps; i++) {
+        let x = xMin + i * xStep;
+        if (j === 0) xData.push(x);
+        try {
+          const scope = { x, y, i: math.complex(0, 1) };
+          if (currentAngleMode === 'deg') {
+            const rad = (v) => v * Math.PI / 180;
+            const deg = (v) => v * 180 / Math.PI;
+            Object.assign(scope, {
+              sin: (v) => math.sin(rad(v)), cos: (v) => math.cos(rad(v)), tan: (v) => math.tan(rad(v)),
+              csc: (v) => math.csc(rad(v)), sec: (v) => math.sec(rad(v)), cot: (v) => math.cot(rad(v)),
+              asin: (v) => deg(math.asin(v)), acos: (v) => deg(math.acos(v)), atan: (v) => deg(math.atan(v))
+            });
+          }
+          let res = compiled.evaluate(scope);
+          if (res && res.isComplex) res = null;
+          zRow.push(Number.isFinite(Number(res)) ? Number(res) : null);
+        } catch (e) {
+          zRow.push(null);
+        }
+      }
+      zData.push(zRow);
+    }
+
+    data = [{
+      type: 'surface',
+      z: zData,
+      x: xData,
+      y: yData,
+      colorscale: 'Viridis'
+    }];
+  } else {
+    let xData = [];
+    let yData = [];
+    let zData = [];
+    let valData = [];
+    
+    let compiled;
+    try {
+      let mathExpr = cleanExpr
+        .replace(/\bcosec\b/g, 'csc')
+        .replace(/\bcotan\b/g, 'cot')
+        .replace(/\bsecant\b/g, 'sec');
+      compiled = math.compile(mathExpr);
+    } catch(e) {
+      throw new Error("Invalid implicit expression. Use x, y, and z.");
+    }
+
+    const steps = 15;
+    const xStep = (xMax - xMin) / steps;
+    const yStep = (yMax - yMin) / steps;
+    const zStep = (zMax - zMin) / steps;
+
+    for (let k = 0; k <= steps; k++) {
+      let z = zMin + k * zStep;
+      for (let j = 0; j <= steps; j++) {
+        let y = yMin + j * yStep;
+        for (let i = 0; i <= steps; i++) {
+          let x = xMin + i * xStep;
+          try {
+            const scope = { x, y, z, i: math.complex(0, 1) };
+            if (currentAngleMode === 'deg') {
+              const rad = (v) => v * Math.PI / 180;
+              Object.assign(scope, {
+                sin: (v) => math.sin(rad(v)), cos: (v) => math.cos(rad(v)), tan: (v) => math.tan(rad(v)),
+                csc: (v) => math.csc(rad(v)), sec: (v) => math.sec(rad(v)), cot: (v) => math.cot(rad(v))
+              });
+            }
+            let res = compiled.evaluate(scope);
+            if (res && !res.isComplex && Number.isFinite(Number(res))) {
+              xData.push(x);
+              yData.push(y);
+              zData.push(z);
+              valData.push(Number(res));
+            }
+          } catch(e) { }
+        }
+      }
+    }
+    
+    data = [{
+      type: 'isosurface',
+      x: xData,
+      y: yData,
+      z: zData,
+      value: valData,
+      isomin: -0.1,
+      isomax: 0.1,
+      colorscale: 'Viridis',
+      caps: { x: {show: false}, y: {show: false}, z: {show: false} },
+    }];
+  }
+
+  const layout = {
+    autosize: true,
+    margin: { l: 0, r: 0, b: 0, t: 0 },
+    scene: {
+      xaxis: { title: 'X' },
+      yaxis: { title: 'Y' },
+      zaxis: { title: 'Z' }
+    },
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)'
+  };
+
+  Plotly.newPlot(els.plotlyDiv, data, layout, {responsive: true});
+
+  return {
+    title: isImplicit ? `Implicit: ${expr}` : `Surface: z = ${cleanExpr}`,
+    legend: [],
+    indicators: [
+      { label: "type", value: isImplicit ? "Isosurface (=0)" : "Explicit (z=f(x,y))" },
+      { label: "x range", value: `[${xMin}, ${xMax}]` },
+      { label: "y range", value: `[${yMin}, ${yMax}]` }
+    ],
+    terms: [],
+    cursor: null
+  };
+}
+
 function setMode(mode) {
   state.mode = mode;
   document.querySelectorAll(".segment").forEach((button) => {
@@ -1450,15 +1597,27 @@ function render() {
   try {
     els.canvasError.hidden = true;
     let result;
-    if (state.mode === "equation") result = plotEquation();
-    if (state.mode === "parametric") result = plotParametric();
-    if (state.mode === "vector") result = plotVector();
-    if (state.mode === "phasor") result = plotPhasor();
-    if (state.mode === "scatter") result = plotScatter();
-    if (state.mode === "bar") result = plotBar();
-    if (state.mode === "polar") result = plotPolar();
-    if (state.mode === "semilog") result = plotSemilog();
-    if (state.mode === "complex") result = plotComplex();
+    
+    if (state.mode === "surface") {
+      els.canvas.style.display = "none";
+      els.plotlyDiv.style.display = "block";
+      result = plotSurface();
+    } else {
+      els.canvas.style.display = "block";
+      els.plotlyDiv.style.display = "none";
+      if (typeof Plotly !== "undefined") Plotly.purge(els.plotlyDiv);
+      
+      if (state.mode === "equation") result = plotEquation();
+      if (state.mode === "parametric") result = plotParametric();
+      if (state.mode === "vector") result = plotVector();
+      if (state.mode === "phasor") result = plotPhasor();
+      if (state.mode === "scatter") result = plotScatter();
+      if (state.mode === "bar") result = plotBar();
+      if (state.mode === "polar") result = plotPolar();
+      if (state.mode === "semilog") result = plotSemilog();
+      if (state.mode === "complex") result = plotComplex();
+    }
+    
     state.lastData = result;
     updateUI(result);
     setupCursorInspector(result.cursor);
@@ -1852,6 +2011,7 @@ function interpretRequest() {
 }
 
 function resetForMode() {
+  zoomFactor = 1;
   if (state.mode === "equation") {
     els.equationInput.value = "sin(x) + 0.35*x";
     els.xMin.value = "-10";
@@ -1888,6 +2048,15 @@ function resetForMode() {
   if (state.mode === "complex") {
     els.complexInput.value = "z1 = 3 + 4i\nz2 = 2 * exp(i * pi / 3)\nResultant = z1 + z2";
   }
+  if (state.mode === "surface") {
+    els.surfaceInput.value = "x^2 + y^2 - z^2 = 0";
+    els.surfXMin.value = "-5";
+    els.surfXMax.value = "5";
+    els.surfYMin.value = "-5";
+    els.surfYMax.value = "5";
+    els.surfZMin.value = "-5";
+    els.surfZMax.value = "5";
+  }
   render();
 }
 
@@ -1899,8 +2068,17 @@ function applyExample(example) {
   recordCurrentGraph();
 }
 
-document.querySelectorAll(".segment").forEach((button) => {
+document.querySelectorAll(".segment[data-mode]").forEach((button) => {
   button.addEventListener("click", () => setMode(button.dataset.mode));
+});
+
+document.querySelectorAll(".segment[data-angle]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".segment[data-angle]").forEach(b => b.classList.remove("active"));
+    button.classList.add("active");
+    currentAngleMode = button.dataset.angle;
+    render();
+  });
 });
 
 document.querySelectorAll(".theme-swatch").forEach((button) => {
@@ -1935,6 +2113,18 @@ els.themeColor.addEventListener("input", (event) => setPreferenceColor("themeCol
 els.cursorColor.addEventListener("input", (event) => setPreferenceColor("cursorColor", event.target.value));
 els.valueColor.addEventListener("input", (event) => setPreferenceColor("valueColor", event.target.value));
 
+els.canvas.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const zoomIn = event.deltaY < 0;
+  zoomFactor *= zoomIn ? 1.1 : 0.9;
+  render();
+});
+
+els.canvas.parentElement.addEventListener("click", () => {
+  els.canvas.parentElement.classList.toggle("fullscreen-graph");
+  render();
+});
+
 ["input", "change"].forEach((eventName) => {
   [
     els.equationInput,
@@ -1955,6 +2145,13 @@ els.valueColor.addEventListener("input", (event) => setPreferenceColor("valueCol
     els.semiXMin,
     els.semiXMax,
     els.complexInput,
+    els.surfaceInput,
+    els.surfXMin,
+    els.surfXMax,
+    els.surfYMin,
+    els.surfYMax,
+    els.surfZMin,
+    els.surfZMax,
   ].forEach((element) => element && element.addEventListener(eventName, render));
 });
 

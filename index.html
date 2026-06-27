@@ -13,6 +13,7 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon-180.png" />
     <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
   </head>
   <body>
     <div id="splashScreen" class="splash-screen">
@@ -86,6 +87,14 @@
         </section>
 
         <section class="control-section">
+          <span class="field-label">Angle mode</span>
+          <div class="segmented" role="tablist" aria-label="Angle mode">
+            <button class="segment active" type="button" data-angle="rad">Radians</button>
+            <button class="segment" type="button" data-angle="deg">Degrees</button>
+          </div>
+        </section>
+
+        <section class="control-section">
           <span class="field-label">Graph type</span>
           <div class="segmented" role="tablist" aria-label="Graph type">
             <button class="segment active" type="button" data-mode="equation">
@@ -114,6 +123,9 @@
             </button>
             <button class="segment" type="button" data-mode="complex">
               Complex
+            </button>
+            <button class="segment" type="button" data-mode="surface">
+              3D Surface
             </button>
           </div>
         </section>
@@ -216,7 +228,38 @@ Optics,68,#a855f7</textarea>
           <label for="complexInput">Complex Expressions (Argand Diagram)</label>
           <textarea id="complexInput" rows="5">z1 = 3 + 4i
 z2 = 2 * exp(i * pi / 3)
-Resultant = z1 + z2</textarea>
+          </textarea>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="surface">
+          <label for="surfaceInput">3D Equation</label>
+          <input id="surfaceInput" value="x^2 + y^2 - z^2 = 0" placeholder="e.g. z = sin(x)*cos(y) or x^2+y^2-z^2=0" />
+          <div class="range-grid">
+            <label>
+              x min
+              <input id="surfXMin" type="number" value="-5" step="1" />
+            </label>
+            <label>
+              x max
+              <input id="surfXMax" type="number" value="5" step="1" />
+            </label>
+            <label>
+              y min
+              <input id="surfYMin" type="number" value="-5" step="1" />
+            </label>
+            <label>
+              y max
+              <input id="surfYMax" type="number" value="5" step="1" />
+            </label>
+            <label>
+              z min
+              <input id="surfZMin" type="number" value="-5" step="1" />
+            </label>
+            <label>
+              z max
+              <input id="surfZMax" type="number" value="5" step="1" />
+            </label>
+          </div>
         </section>
 
         <div class="button-row">
@@ -254,6 +297,7 @@ Resultant = z1 + z2</textarea>
         <section class="plot-area">
           <div class="plot-frame">
             <canvas id="plotCanvas" aria-label="Generated graph"></canvas>
+            <div id="plotlyDiv" style="display:none; width:100%; height:100%;"></div>
             <div class="canvas-error" id="canvasError" hidden></div>
           </div>
           <div class="legend" id="legend"></div>
