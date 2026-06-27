@@ -130,9 +130,20 @@
             <div class="segmented" role="tablist">
               <button class="segment" type="button" data-mode="phasor">Phasors</button>
               <button class="segment" type="button" data-mode="complex">Complex Numbers</button>
+              <button class="segment" type="button" data-mode="bode">Bode Plot</button>
+              <button class="segment" type="button" data-mode="digital">Digital Logic</button>
             </div>
           </div>
 
+          <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
+            🎛️ Control Systems
+            <span class="category-icon">▶</span>
+          </button>
+          <div class="category-content">
+            <div class="segmented" role="tablist">
+              <button class="segment" type="button" data-mode="transient">Transient Response</button>
+            </div>
+          </div>
           <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
             📊 Data & Stats
             <span class="category-icon">▶</span>
@@ -314,6 +325,45 @@ z2 = 2 * exp(i * pi / 3)
 -1, 1, #1f9bd1
 -1, -1, #f97316
 1, -1, #16a34a</textarea>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="bode">
+          <label for="bodeInput">Transfer Function H(s) or G(s)</label>
+          <input id="bodeInput" value="100 / (s^2 + 10*s + 100)" placeholder="e.g. 10 / (s + 2)" />
+          <div class="range-grid">
+            <label>
+              ω min (rad/s)
+              <input id="bodeWMin" type="number" value="0.1" step="0.1" />
+            </label>
+            <label>
+              ω max (rad/s)
+              <input id="bodeWMax" type="number" value="1000" step="10" />
+            </label>
+          </div>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="transient">
+          <label for="transientInput">Transfer Function G(s)</label>
+          <input id="transientInput" value="25 / (s^2 + 2*s + 25)" placeholder="e.g. 1 / (s + 1)" />
+          <label for="transientAction">Input Type</label>
+          <select id="transientAction" class="input-field" style="width:100%; margin-bottom:8px; padding:6px; border-radius:4px; border:1px solid var(--line); background:var(--surface); color:var(--ink);">
+            <option value="step">Step Response (1/s)</option>
+            <option value="impulse">Impulse Response (1)</option>
+          </select>
+          <div class="range-grid">
+            <label>
+              t max (sec)
+              <input id="transientTMax" type="number" value="5" step="0.5" />
+            </label>
+          </div>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="digital">
+          <label for="digitalInput">Digital Sequences (Name: Sequence, Color)</label>
+          <textarea id="digitalInput" rows="6">Clock: 101010101010, #64748b
+Data: 011001001110, #38bdf8
+Enable: 000111111000, #f97316
+Output: 001001001010, #16a34a</textarea>
         </section>
         <div class="button-row">
           <button class="primary-button" id="plotButton" type="button">

@@ -186,6 +186,13 @@ const els = {
   calcTargetGrid: document.getElementById("calcTargetGrid"),
   matrixInput: document.getElementById("matrixInput"),
   matrixVectorInput: document.getElementById("matrixVectorInput"),
+  bodeInput: document.getElementById("bodeInput"),
+  bodeWMin: document.getElementById("bodeWMin"),
+  bodeWMax: document.getElementById("bodeWMax"),
+  transientInput: document.getElementById("transientInput"),
+  transientAction: document.getElementById("transientAction"),
+  transientTMax: document.getElementById("transientTMax"),
+  digitalInput: document.getElementById("digitalInput"),
   plotlyDiv: document.getElementById("plotlyDiv"),
   graphTitle: document.getElementById("graphTitle"),
   modeEyebrow: document.getElementById("modeEyebrow"),
@@ -1589,6 +1596,301 @@ function plotMatrix() {
   };
 }
 
+function plotBode() {
+  const canvas = setupCanvas();
+  const expr = els.bodeInput.value.trim();
+  const wMin = Math.max(0.001, Number(els.bodeWMin.value) || 0.1);
+  const wMax = Math.max(wMin * 10, Number(els.bodeWMax.value) || 1000);
+  
+  let compiled;
+  try {
+    compiled = math.compile(expr);
+  } catch(e) {
+    throw new Error("Invalid transfer function: " + e.message);
+  }
+  
+  const width = canvas.width;
+  const height = canvas.height;
+  const pad = canvas.pad;
+  const plotW = width - pad * 2;
+  const plotH = height - pad * 2;
+  const magH = plotH * 0.6;
+  const phaseH = plotH * 0.35;
+  
+  const wSteps = 200;
+  const logWMin = Math.log10(wMin);
+  const logWMax = Math.log10(wMax);
+  const wStep = (logWMax - logWMin) / wSteps;
+  
+  let data = [];
+  let minMag = Infinity, maxMag = -Infinity;
+  let minPhase = Infinity, maxPhase = -Infinity;
+  
+  for (let i = 0; i <= wSteps; i++) {
+    const w = Math.pow(10, logWMin + i * wStep);
+    try {
+      const s = math.complex(0, w);
+      let res = compiled.evaluate({s: s});
+      if (typeof res === 'number') res = math.complex(res, 0);
+      const mag = 20 * Math.log10(res.abs());
+      let phase = res.arg() * 180 / Math.PI;
+      
+      // Unwrap phase
+      if (data.length > 0) {
+        let prevPhase = data[data.length-1].phase;
+        while (phase - prevPhase > 180) phase -= 360;
+        while (prevPhase - phase > 180) phase += 360;
+      }
+      
+      if (isFinite(mag) && isFinite(phase)) {
+        data.push({w, logW: logWMin + i * wStep, mag, phase});
+        minMag = Math.min(minMag, mag); maxMag = Math.max(maxMag, mag);
+        minPhase = Math.min(minPhase, phase); maxPhase = Math.max(maxPhase, phase);
+      }
+    } catch(e) {}
+  }
+  
+  if (data.length === 0) throw new Error("Could not evaluate transfer function.");
+  
+  // Padding for scales
+  minMag -= 10; maxMag += 10;
+  minPhase -= 20; maxPhase += 20;
+  
+  canvas.ctx.fillStyle = canvasTheme().plotBg;
+  canvas.ctx.fillRect(0, 0, width, height);
+  canvas.ctx.lineWidth = 2;
+  
+  const toX = (logW) => pad + ((logW - logWMin) / (logWMax - logWMin)) * plotW;
+  const toMagY = (mag) => pad + magH - ((mag - minMag) / (maxMag - minMag)) * magH;
+  const toPhaseY = (phase) => pad + magH + (plotH * 0.05) + phaseH - ((phase - minPhase) / (maxPhase - minPhase)) * phaseH;
+  
+  // Draw grids
+  canvas.ctx.strokeStyle = canvasTheme().grid;
+  canvas.ctx.lineWidth = 1;
+  for (let lw = Math.ceil(logWMin); lw <= Math.floor(logWMax); lw++) {
+    const x = toX(lw);
+    canvas.ctx.beginPath(); canvas.ctx.moveTo(x, pad); canvas.ctx.lineTo(x, height-pad); canvas.ctx.stroke();
+  }
+  
+  canvas.ctx.beginPath();
+  data.forEach((p, i) => i===0 ? canvas.ctx.moveTo(toX(p.logW), toMagY(p.mag)) : canvas.ctx.lineTo(toX(p.logW), toMagY(p.mag)));
+  canvas.ctx.strokeStyle = "#38bdf8";
+  canvas.ctx.lineWidth = 2;
+  canvas.ctx.stroke();
+  
+  canvas.ctx.beginPath();
+  data.forEach((p, i) => i===0 ? canvas.ctx.moveTo(toX(p.logW), toPhaseY(p.phase)) : canvas.ctx.lineTo(toX(p.logW), toPhaseY(p.phase)));
+  canvas.ctx.strokeStyle = "#ef4444";
+  canvas.ctx.lineWidth = 2;
+  canvas.ctx.stroke();
+  
+  // Labels
+  canvas.ctx.fillStyle = canvasTheme().axis;
+  canvas.ctx.font = "12px Segoe UI, sans-serif";
+  canvas.ctx.fillText("Magnitude (dB)", pad + 10, pad + 20);
+  canvas.ctx.fillText("Phase (°)", pad + 10, pad + magH + 30);
+  
+  const dcGain = data.length > 0 ? formatNumber(data[0].mag) : "N/A";
+
+  const mapper = { toX, toY: toMagY }; // Dummy for cursor
+
+  return {
+    title: "Bode Plot",
+    legend: [
+      { label: "Magnitude", color: "#38bdf8" },
+      { label: "Phase", color: "#ef4444" }
+    ],
+    indicators: [{ label: "DC Gain (approx)", value: `${dcGain} dB` }],
+    terms: [],
+    cursor: {
+      color: "#38bdf8",
+      points: buildCursorPoints(data.map(p => ({ x: Math.pow(10, p.logW), y: p.mag, label: "Mag" })), mapper, p => `ω=${formatNumber(p.x)}, ${formatNumber(p.y)}dB`)
+    }
+  };
+}
+
+function plotTransient() {
+  const canvas = setupCanvas();
+  const expr = els.transientInput.value.trim();
+  const action = els.transientAction.value;
+  const tMax = Number(els.transientTMax.value) || 5;
+  
+  let compiled;
+  try { compiled = math.compile(expr); } catch(e) { throw new Error("Invalid transfer function."); }
+  
+  // Extract up to 2nd order coefficients by evaluating at s=0, s=1, s=-1
+  let n0=0, n1=0, n2=0, d0=0, d1=0, d2=0;
+  try {
+    // We assume G(s) is entered as poly(s)/poly(s) but math.js evaluates the whole thing.
+    // So evaluating G(s) directly doesn't give num/den. 
+    // We need to parse num and den separately.
+    const parts = expr.split('/');
+    if (parts.length !== 2) throw new Error("Must be in form Numerator / Denominator");
+    
+    const evalPoly = (str, sVal) => math.compile(str).evaluate({s: sVal});
+    const getC = (str) => {
+      const v0 = evalPoly(str, 0);
+      const v1 = evalPoly(str, 1);
+      const vM1 = evalPoly(str, -1);
+      const c = v0;
+      const a = (v1 + vM1 - 2*c) / 2;
+      const b = (v1 - vM1) / 2;
+      return {a, b, c};
+    };
+    
+    const num = getC(parts[0]);
+    const den = getC(parts[1]);
+    
+    n2 = num.a; n1 = num.b; n0 = num.c;
+    d2 = den.a; d1 = den.b; d0 = den.c;
+  } catch(e) {
+    throw new Error("Could not extract coefficients. Ensure G(s) is up to 2nd order (e.g., 1 / (s^2 + 2*s + 1)).");
+  }
+  
+  if (Math.abs(d2) < 1e-7 && Math.abs(d1) < 1e-7) throw new Error("Denominator must have s terms.");
+  
+  // RK4 Simulation
+  // State space:
+  // x1' = x2
+  // x2' = (u - d1*x2 - d0*x1) / d2  (if d2 != 0)
+  // For 1st order (d2=0): x1' = (u - d0*x1) / d1
+  
+  let x1 = 0, x2 = 0;
+  const dt = tMax / 500;
+  let t = 0;
+  let points = [];
+  
+  let maxY = -Infinity;
+  let minY = Infinity;
+  
+  for (let i = 0; i <= 500; i++) {
+    t = i * dt;
+    let u = action === 'step' ? 1 : (i === 0 ? 1/dt : 0); // approx impulse
+    
+    let y = 0;
+    if (Math.abs(d2) > 1e-7) {
+      // 2nd order
+      const f1 = (x1, x2) => x2;
+      const f2 = (x1, x2, u) => (u - d1*x2 - d0*x1) / d2;
+      
+      let k1x1 = f1(x1, x2), k1x2 = f2(x1, x2, u);
+      let k2x1 = f1(x1 + 0.5*dt*k1x1, x2 + 0.5*dt*k1x2), k2x2 = f2(x1 + 0.5*dt*k1x1, x2 + 0.5*dt*k1x2, u);
+      let k3x1 = f1(x1 + 0.5*dt*k2x1, x2 + 0.5*dt*k2x2), k3x2 = f2(x1 + 0.5*dt*k2x1, x2 + 0.5*dt*k2x2, u);
+      let k4x1 = f1(x1 + dt*k3x1, x2 + dt*k3x2), k4x2 = f2(x1 + dt*k3x1, x2 + dt*k3x2, u);
+      
+      x1 += (dt/6)*(k1x1 + 2*k2x1 + 2*k3x1 + k4x1);
+      x2 += (dt/6)*(k1x2 + 2*k2x2 + 2*k3x2 + k4x2);
+      
+      let x1_dot = x2; // Approx for y
+      y = n0*x1 + n1*x2 + n2*f2(x1, x2, u);
+    } else {
+      // 1st order
+      const f1 = (x1, u) => (u - d0*x1) / d1;
+      let k1 = f1(x1, u);
+      let k2 = f1(x1 + 0.5*dt*k1, u);
+      let k3 = f1(x1 + 0.5*dt*k2, u);
+      let k4 = f1(x1 + dt*k3, u);
+      x1 += (dt/6)*(k1 + 2*k2 + 2*k3 + k4);
+      y = n0*x1 + n1*f1(x1, u);
+    }
+    
+    points.push({x: t, y, label: 'Response'});
+    maxY = Math.max(maxY, y);
+    minY = Math.min(minY, y);
+  }
+  
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, 0, tMax, minY - 0.2*Math.abs(maxY-minY), maxY + 0.2*Math.abs(maxY-minY));
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Time (s)", yLabel: "Amplitude"});
+  
+  canvas.ctx.beginPath();
+  points.forEach((p, i) => i===0 ? canvas.ctx.moveTo(mapper.toX(p.x), mapper.toY(p.y)) : canvas.ctx.lineTo(mapper.toX(p.x), mapper.toY(p.y)));
+  canvas.ctx.strokeStyle = "#10b981";
+  canvas.ctx.lineWidth = 2;
+  canvas.ctx.stroke();
+
+  return {
+    title: action === 'step' ? "Step Response" : "Impulse Response",
+    legend: [{ label: "y(t)", color: "#10b981" }],
+    indicators: [{ label: "Final Value", value: formatNumber(points[points.length-1].y) }],
+    terms: [],
+    cursor: { color: "#10b981", points: buildCursorPoints(points, mapper, p => `t=${formatNumber(p.x)}, y=${formatNumber(p.y)}`) }
+  };
+}
+
+function plotDigital() {
+  const canvas = setupCanvas();
+  const inputStr = els.digitalInput.value.trim();
+  
+  const lines = inputStr.split('\n').filter(r => r.trim());
+  let signals = [];
+  
+  lines.forEach((line, idx) => {
+    try {
+      const parts = line.split(':');
+      if (parts.length >= 2) {
+        const name = parts[0].trim();
+        const dataParts = parts[1].split(',');
+        const seq = dataParts[0].trim();
+        const color = dataParts[1] ? dataParts[1].trim() : palette[idx % palette.length];
+        signals.push({ name, seq, color });
+      }
+    } catch(e) {}
+  });
+  
+  if (signals.length === 0) throw new Error("No valid digital sequences found.");
+  
+  canvas.ctx.fillStyle = canvasTheme().plotBg;
+  canvas.ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  const pad = canvas.pad;
+  const plotW = canvas.width - pad * 2;
+  const plotH = canvas.height - pad * 2;
+  
+  const trackHeight = plotH / signals.length;
+  
+  // Find max sequence length
+  let maxLen = 0;
+  signals.forEach(s => maxLen = Math.max(maxLen, s.seq.length));
+  
+  const bitWidth = plotW / Math.max(1, maxLen);
+  
+  signals.forEach((sig, i) => {
+    const yBase = pad + i * trackHeight + trackHeight * 0.8;
+    const yHigh = pad + i * trackHeight + trackHeight * 0.2;
+    
+    canvas.ctx.fillStyle = canvasTheme().axis;
+    canvas.ctx.font = "12px Segoe UI";
+    canvas.ctx.fillText(sig.name, 10, yBase - (yBase-yHigh)/2 + 4);
+    
+    canvas.ctx.beginPath();
+    let prevBit = null;
+    for (let j = 0; j < maxLen; j++) {
+      let bit = j < sig.seq.length ? (sig.seq[j] === '1' ? 1 : 0) : 0;
+      let xStart = pad + j * bitWidth;
+      let xEnd = pad + (j+1) * bitWidth;
+      let y = bit ? yHigh : yBase;
+      
+      if (j === 0) canvas.ctx.moveTo(xStart, y);
+      else if (prevBit !== bit) canvas.ctx.lineTo(xStart, y);
+      
+      canvas.ctx.lineTo(xEnd, y);
+      prevBit = bit;
+    }
+    
+    canvas.ctx.strokeStyle = sig.color;
+    canvas.ctx.lineWidth = 2;
+    canvas.ctx.stroke();
+  });
+
+  return {
+    title: "Digital Timing Diagram",
+    legend: signals.map(s => ({ label: s.name, color: s.color })),
+    indicators: [{ label: "Clock Cycles", value: maxLen.toString() }],
+    terms: [],
+    cursor: null
+  };
+}
+
 function plotSurface() {
   const expr = els.surfaceInput.value.trim();
   const xMin = Number(els.surfXMin.value) || -5;
@@ -1813,6 +2115,9 @@ function render() {
       if (state.mode === "complex") result = plotComplex();
       if (state.mode === "calculus") result = plotCalculus();
       if (state.mode === "matrix") result = plotMatrix();
+      if (state.mode === "bode") result = plotBode();
+      if (state.mode === "transient") result = plotTransient();
+      if (state.mode === "digital") result = plotDigital();
     }
     
     state.lastData = result;
@@ -2089,6 +2394,27 @@ function collectFields() {
     semiXMin: els.semiXMin.value,
     semiXMax: els.semiXMax.value,
     complex: els.complexInput.value,
+    surface: els.surfaceInput.value,
+    surfXMin: els.surfXMin.value,
+    surfXMax: els.surfXMax.value,
+    surfYMin: els.surfYMin.value,
+    surfYMax: els.surfYMax.value,
+    surfZMin: els.surfZMin.value,
+    surfZMax: els.surfZMax.value,
+    calculus: els.calculusInput.value,
+    calculusAction: els.calculusAction.value,
+    calcXMin: els.calcXMin.value,
+    calcXMax: els.calcXMax.value,
+    calcTargetX: els.calcTargetX.value,
+    matrix: els.matrixInput.value,
+    matrixVector: els.matrixVectorInput.value,
+    bode: els.bodeInput.value,
+    bodeWMin: els.bodeWMin.value,
+    bodeWMax: els.bodeWMax.value,
+    transient: els.transientInput.value,
+    transientAction: els.transientAction.value,
+    transientTMax: els.transientTMax.value,
+    digital: els.digitalInput.value,
   };
 }
 
@@ -2137,6 +2463,27 @@ function applyFields(fields = {}) {
   if (fields.semiXMin !== undefined) els.semiXMin.value = fields.semiXMin;
   if (fields.semiXMax !== undefined) els.semiXMax.value = fields.semiXMax;
   if (fields.complex !== undefined) els.complexInput.value = fields.complex;
+  if (fields.surface !== undefined) els.surfaceInput.value = fields.surface;
+  if (fields.surfXMin !== undefined) els.surfXMin.value = fields.surfXMin;
+  if (fields.surfXMax !== undefined) els.surfXMax.value = fields.surfXMax;
+  if (fields.surfYMin !== undefined) els.surfYMin.value = fields.surfYMin;
+  if (fields.surfYMax !== undefined) els.surfYMax.value = fields.surfYMax;
+  if (fields.surfZMin !== undefined) els.surfZMin.value = fields.surfZMin;
+  if (fields.surfZMax !== undefined) els.surfZMax.value = fields.surfZMax;
+  if (fields.calculus !== undefined) els.calculusInput.value = fields.calculus;
+  if (fields.calculusAction !== undefined) els.calculusAction.value = fields.calculusAction;
+  if (fields.calcXMin !== undefined) els.calcXMin.value = fields.calcXMin;
+  if (fields.calcXMax !== undefined) els.calcXMax.value = fields.calcXMax;
+  if (fields.calcTargetX !== undefined) els.calcTargetX.value = fields.calcTargetX;
+  if (fields.matrix !== undefined) els.matrixInput.value = fields.matrix;
+  if (fields.matrixVector !== undefined) els.matrixVectorInput.value = fields.matrixVector;
+  if (fields.bode !== undefined) els.bodeInput.value = fields.bode;
+  if (fields.bodeWMin !== undefined) els.bodeWMin.value = fields.bodeWMin;
+  if (fields.bodeWMax !== undefined) els.bodeWMax.value = fields.bodeWMax;
+  if (fields.transient !== undefined) els.transientInput.value = fields.transient;
+  if (fields.transientAction !== undefined) els.transientAction.value = fields.transientAction;
+  if (fields.transientTMax !== undefined) els.transientTMax.value = fields.transientTMax;
+  if (fields.digital !== undefined) els.digitalInput.value = fields.digital;
 }
 
 function restoreHistoryItem(id) {
@@ -2155,6 +2502,31 @@ function interpretRequest() {
   const text = els.promptInput.value.trim();
   if (!text) return;
   const lower = text.toLowerCase();
+  if (lower.includes("bode") || lower.includes("frequency response")) {
+    setMode("bode");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("transient") || lower.includes("step response") || lower.includes("impulse response")) {
+    setMode("transient");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("digital") || lower.includes("timing") || lower.includes("logic")) {
+    setMode("digital");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("derivative") || lower.includes("integral") || lower.includes("calculus") || lower.includes("tangent")) {
+    setMode("calculus");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("matrix") || lower.includes("transform")) {
+    setMode("matrix");
+    recordCurrentGraph();
+    return;
+  }
   if (lower.includes("phasor") || lower.includes("phase")) {
     setMode("phasor");
     recordCurrentGraph();
@@ -2264,6 +2636,19 @@ function resetForMode() {
   if (state.mode === "matrix") {
     els.matrixInput.value = "1, 0.5\n-0.5, 1";
     els.matrixVectorInput.value = "1, 1, #ef4444\n-1, 1, #1f9bd1\n-1, -1, #f97316\n1, -1, #16a34a";
+  }
+  if (state.mode === "bode") {
+    els.bodeInput.value = "100 / (s^2 + 10*s + 100)";
+    els.bodeWMin.value = "0.1";
+    els.bodeWMax.value = "1000";
+  }
+  if (state.mode === "transient") {
+    els.transientInput.value = "25 / (s^2 + 2*s + 25)";
+    els.transientAction.value = "step";
+    els.transientTMax.value = "5";
+  }
+  if (state.mode === "digital") {
+    els.digitalInput.value = "Clock: 101010101010, #64748b\nData: 011001001110, #38bdf8\nEnable: 000111111000, #f97316\nOutput: 001001001010, #16a34a";
   }
   render();
 }
@@ -2403,6 +2788,13 @@ els.canvas.addEventListener("click", () => {
     els.calcTargetX,
     els.matrixInput,
     els.matrixVectorInput,
+    els.bodeInput,
+    els.bodeWMin,
+    els.bodeWMax,
+    els.transientInput,
+    els.transientAction,
+    els.transientTMax,
+    els.digitalInput,
   ].forEach((element) => element && element.addEventListener(eventName, render));
 });
 
