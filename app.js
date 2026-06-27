@@ -1408,8 +1408,8 @@ function plotCalculus() {
   const xMax = Number(els.calcXMax.value) || 10;
   const targetX = Number(els.calcTargetX.value) || 0;
   
-  const mapper = setupMapper(canvas, xMin, xMax);
-  drawGrid(canvas, mapper);
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, xMin, xMax, -10, 10);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper);
   
   let compiledFn;
   let derivFn = null;
@@ -1526,8 +1526,8 @@ function plotMatrix() {
      if (rows.length === 2) matrix = rows.map(r => r.split(',').map(n => Number(n.trim())));
   } catch (e) {}
   
-  const mapper = setupMapper(canvas, -10, 10);
-  drawGrid(canvas, mapper);
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, -10, 10, -10, 10);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper);
   
   const transform = (m, x, y) => ({ x: m[0][0]*x + m[0][1]*y, y: m[1][0]*x + m[1][1]*y });
   
