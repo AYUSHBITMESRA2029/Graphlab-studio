@@ -1400,6 +1400,8 @@ function plotComplex() {
       points: buildCursorPoints(points.map(p => ({ x: p.re, y: p.im, label: p.label })), mapper, p => `${p.label} = ${formatNumber(p.x)} ${p.y >= 0 ? '+' : '-'} ${formatNumber(Math.abs(p.y))}i`)
     }
   };
+}
+
 function plotCalculus() {
   const canvas = setupCanvas();
   const expr = els.calculusInput.value.trim();
