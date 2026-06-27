@@ -95,38 +95,54 @@
         </section>
 
         <section class="control-section">
-          <span class="field-label">Graph type</span>
-          <div class="segmented" role="tablist" aria-label="Graph type">
-            <button class="segment active" type="button" data-mode="equation">
-              Equation
-            </button>
-            <button class="segment" type="button" data-mode="parametric">
-              Parametric
-            </button>
-            <button class="segment" type="button" data-mode="vector">
-              Vector
-            </button>
-            <button class="segment" type="button" data-mode="phasor">
-              Phasor
-            </button>
-            <button class="segment" type="button" data-mode="scatter">
-              Scatter
-            </button>
-            <button class="segment" type="button" data-mode="bar">
-              Bar
-            </button>
-            <button class="segment" type="button" data-mode="polar">
-              Polar
-            </button>
-            <button class="segment" type="button" data-mode="semilog">
-              Semilog
-            </button>
-            <button class="segment" type="button" data-mode="complex">
-              Complex
-            </button>
-            <button class="segment" type="button" data-mode="surface">
-              3D Surface
-            </button>
+          <span class="field-label">Graph Categories</span>
+          
+          <button class="category-header active" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
+            📐 Mathematics
+            <span class="category-icon">▶</span>
+          </button>
+          <div class="category-content active">
+            <div class="segmented" role="tablist">
+              <button class="segment active" type="button" data-mode="equation">Equation 2D</button>
+              <button class="segment" type="button" data-mode="parametric">Parametric</button>
+              <button class="segment" type="button" data-mode="polar">Polar</button>
+              <button class="segment" type="button" data-mode="calculus">Calculus Tools</button>
+              <button class="segment" type="button" data-mode="surface">3D Surface</button>
+            </div>
+          </div>
+
+          <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
+            🧮 Linear Algebra
+            <span class="category-icon">▶</span>
+          </button>
+          <div class="category-content">
+            <div class="segmented" role="tablist">
+              <button class="segment" type="button" data-mode="matrix">Matrix Transforms</button>
+              <button class="segment" type="button" data-mode="vector">Vectors (2D/3D)</button>
+            </div>
+          </div>
+
+          <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
+            ⚡ Electrical Eng.
+            <span class="category-icon">▶</span>
+          </button>
+          <div class="category-content">
+            <div class="segmented" role="tablist">
+              <button class="segment" type="button" data-mode="phasor">Phasors</button>
+              <button class="segment" type="button" data-mode="complex">Complex Numbers</button>
+            </div>
+          </div>
+
+          <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
+            📊 Data & Stats
+            <span class="category-icon">▶</span>
+          </button>
+          <div class="category-content">
+            <div class="segmented" role="tablist">
+              <button class="segment" type="button" data-mode="scatter">Scatter</button>
+              <button class="segment" type="button" data-mode="bar">Bar Chart</button>
+              <button class="segment" type="button" data-mode="semilog">Semilog</button>
+            </div>
           </div>
         </section>
 
@@ -262,6 +278,43 @@ z2 = 2 * exp(i * pi / 3)
           </div>
         </section>
 
+        <section class="control-section mode-fields" data-fields="calculus">
+          <label for="calculusInput">Function y = f(x)</label>
+          <input id="calculusInput" value="0.5 * x^3 - 2 * x" />
+          <label for="calculusAction">Action</label>
+          <select id="calculusAction" class="input-field" style="width:100%; margin-bottom:8px; padding:6px; border-radius:4px; border:1px solid var(--line); background:var(--surface); color:var(--ink);">
+            <option value="derivative">Plot Derivative (y')</option>
+            <option value="tangent">Tangent Line</option>
+            <option value="integral">Area Under Curve (Integral)</option>
+          </select>
+          <div class="range-grid">
+            <label>
+              x min
+              <input id="calcXMin" type="number" value="-5" step="0.5" />
+            </label>
+            <label>
+              x max
+              <input id="calcXMax" type="number" value="5" step="0.5" />
+            </label>
+          </div>
+          <div class="range-grid" id="calcTargetGrid">
+            <label>
+              Target x (Tangent)
+              <input id="calcTargetX" type="number" value="1" step="0.5" />
+            </label>
+          </div>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="matrix">
+          <label for="matrixInput">Matrix Transforms (Comma separated rows)</label>
+          <textarea id="matrixInput" rows="3">1, 0.5
+-0.5, 1</textarea>
+          <label for="matrixVectorInput">Points / Vectors to Transform</label>
+          <textarea id="matrixVectorInput" rows="4">1, 1, #ef4444
+-1, 1, #1f9bd1
+-1, -1, #f97316
+1, -1, #16a34a</textarea>
+        </section>
         <div class="button-row">
           <button class="primary-button" id="plotButton" type="button">
             Plot graph

@@ -178,6 +178,14 @@ const els = {
   surfYMax: document.getElementById("surfYMax"),
   surfZMin: document.getElementById("surfZMin"),
   surfZMax: document.getElementById("surfZMax"),
+  calculusInput: document.getElementById("calculusInput"),
+  calculusAction: document.getElementById("calculusAction"),
+  calcXMin: document.getElementById("calcXMin"),
+  calcXMax: document.getElementById("calcXMax"),
+  calcTargetX: document.getElementById("calcTargetX"),
+  calcTargetGrid: document.getElementById("calcTargetGrid"),
+  matrixInput: document.getElementById("matrixInput"),
+  matrixVectorInput: document.getElementById("matrixVectorInput"),
   plotlyDiv: document.getElementById("plotlyDiv"),
   graphTitle: document.getElementById("graphTitle"),
   modeEyebrow: document.getElementById("modeEyebrow"),
@@ -1392,6 +1400,191 @@ function plotComplex() {
       points: buildCursorPoints(points.map(p => ({ x: p.re, y: p.im, label: p.label })), mapper, p => `${p.label} = ${formatNumber(p.x)} ${p.y >= 0 ? '+' : '-'} ${formatNumber(Math.abs(p.y))}i`)
     }
   };
+function plotCalculus() {
+  const canvas = setupCanvas();
+  const expr = els.calculusInput.value.trim();
+  const action = els.calculusAction.value;
+  const xMin = Number(els.calcXMin.value) || -10;
+  const xMax = Number(els.calcXMax.value) || 10;
+  const targetX = Number(els.calcTargetX.value) || 0;
+  
+  const mapper = setupMapper(canvas, xMin, xMax);
+  drawGrid(canvas, mapper);
+  
+  let compiledFn;
+  let derivFn = null;
+  try {
+    let cleanExpr = expr.replace(/y\s*=\s*/i, "");
+    compiledFn = math.compile(cleanExpr);
+    if (action === "derivative" || action === "tangent") {
+      const d = math.derivative(cleanExpr, 'x');
+      derivFn = d.compile();
+    }
+  } catch (e) {
+    throw new Error("Invalid function or derivative: " + e.message);
+  }
+  
+  const points = [];
+  const derivPoints = [];
+  const step = (xMax - xMin) / (canvas.width / 2);
+  
+  if (action === "integral") {
+    canvas.ctx.beginPath();
+    canvas.ctx.moveTo(mapper.toX(xMin), mapper.toY(0));
+    for (let x = xMin; x <= xMax; x += step) {
+      try {
+        const y = compiledFn.evaluate({ x: x });
+        if (isFinite(y)) canvas.ctx.lineTo(mapper.toX(x), mapper.toY(y));
+      } catch (e) {}
+    }
+    canvas.ctx.lineTo(mapper.toX(xMax), mapper.toY(0));
+    canvas.ctx.fillStyle = "rgba(56, 189, 248, 0.2)";
+    canvas.ctx.fill();
+  }
+
+  canvas.ctx.beginPath();
+  let first = true;
+  for (let x = xMin; x <= xMax; x += step) {
+    try {
+      const y = compiledFn.evaluate({ x: x });
+      if (isFinite(y)) {
+        if (first) { canvas.ctx.moveTo(mapper.toX(x), mapper.toY(y)); first = false; }
+        else canvas.ctx.lineTo(mapper.toX(x), mapper.toY(y));
+        points.push({x, y, label: 'f(x)'});
+      }
+    } catch (e) {}
+  }
+  canvas.ctx.strokeStyle = "#38bdf8";
+  canvas.ctx.lineWidth = 2;
+  canvas.ctx.stroke();
+
+  let indicators = [];
+  let legend = [{ label: "f(x)", color: "#38bdf8" }];
+  
+  if (action === "derivative" && derivFn) {
+    canvas.ctx.beginPath();
+    first = true;
+    for (let x = xMin; x <= xMax; x += step) {
+      try {
+        const y = derivFn.evaluate({ x: x });
+        if (isFinite(y)) {
+          if (first) { canvas.ctx.moveTo(mapper.toX(x), mapper.toY(y)); first = false; }
+          else canvas.ctx.lineTo(mapper.toX(x), mapper.toY(y));
+          derivPoints.push({x, y, label: "f'(x)"});
+        }
+      } catch (e) {}
+    }
+    canvas.ctx.strokeStyle = "#ef4444";
+    canvas.ctx.lineWidth = 2;
+    canvas.ctx.stroke();
+    legend.push({ label: "f'(x)", color: "#ef4444" });
+  } else if (action === "tangent" && derivFn) {
+    try {
+      const y0 = compiledFn.evaluate({ x: targetX });
+      const m = derivFn.evaluate({ x: targetX });
+      canvas.ctx.beginPath();
+      canvas.ctx.moveTo(mapper.toX(xMin), mapper.toY(m * (xMin - targetX) + y0));
+      canvas.ctx.lineTo(mapper.toX(xMax), mapper.toY(m * (xMax - targetX) + y0));
+      canvas.ctx.strokeStyle = "#ef4444";
+      canvas.ctx.lineWidth = 2;
+      canvas.ctx.setLineDash([5, 5]);
+      canvas.ctx.stroke();
+      canvas.ctx.setLineDash([]);
+      canvas.ctx.beginPath();
+      canvas.ctx.arc(mapper.toX(targetX), mapper.toY(y0), 5, 0, 2*Math.PI);
+      canvas.ctx.fillStyle = "#ef4444";
+      canvas.ctx.fill();
+      indicators.push({ label: "Gradient (m)", value: formatNumber(m) });
+      legend.push({ label: "Tangent Line", color: "#ef4444" });
+    } catch (e) {}
+  } else if (action === "integral") {
+    let area = 0;
+    for (let x = xMin; x < xMax; x += step) {
+       area += compiledFn.evaluate({x: x + step/2}) * step;
+    }
+    indicators.push({ label: "Area (approx)", value: formatNumber(area) });
+    legend.push({ label: "Integral Area", color: "rgba(56, 189, 248, 0.2)" });
+  }
+
+  return {
+    title: "Calculus",
+    legend: legend,
+    indicators: indicators,
+    terms: [],
+    cursor: { color: "#38bdf8", points: buildCursorPoints([...points, ...derivPoints], mapper, p => `${p.label}(${formatNumber(p.x)}) = ${formatNumber(p.y)}`) }
+  };
+}
+
+function plotMatrix() {
+  const canvas = setupCanvas();
+  const matrixStr = els.matrixInput.value.trim();
+  const vectorStr = els.matrixVectorInput.value.trim();
+  
+  let matrix = [[1, 0], [0, 1]];
+  try {
+     const rows = matrixStr.split('\n').filter(r => r.trim());
+     if (rows.length === 2) matrix = rows.map(r => r.split(',').map(n => Number(n.trim())));
+  } catch (e) {}
+  
+  const mapper = setupMapper(canvas, -10, 10);
+  drawGrid(canvas, mapper);
+  
+  const transform = (m, x, y) => ({ x: m[0][0]*x + m[0][1]*y, y: m[1][0]*x + m[1][1]*y });
+  
+  canvas.ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  canvas.ctx.lineWidth = 1;
+  canvas.ctx.beginPath();
+  for (let i = -10; i <= 10; i++) {
+     let start = transform(matrix, i, -10);
+     let end = transform(matrix, i, 10);
+     canvas.ctx.moveTo(mapper.toX(start.x), mapper.toY(start.y));
+     canvas.ctx.lineTo(mapper.toX(end.x), mapper.toY(end.y));
+     start = transform(matrix, -10, i);
+     end = transform(matrix, 10, i);
+     canvas.ctx.moveTo(mapper.toX(start.x), mapper.toY(start.y));
+     canvas.ctx.lineTo(mapper.toX(end.x), mapper.toY(end.y));
+  }
+  canvas.ctx.stroke();
+
+  let vecs = [];
+  try {
+     const lines = vectorStr.split('\n').filter(r => r.trim());
+     lines.forEach((line, idx) => {
+        const parts = line.split(',');
+        if (parts.length >= 2) {
+           const x = Number(parts[0]);
+           const y = Number(parts[1]);
+           const color = parts[2] ? parts[2].trim() : palette[idx % palette.length];
+           
+           const drawV = (vx, vy, col, alpha) => {
+             canvas.ctx.globalAlpha = alpha;
+             canvas.ctx.strokeStyle = col;
+             canvas.ctx.fillStyle = col;
+             canvas.ctx.lineWidth = 3;
+             canvas.ctx.beginPath();
+             canvas.ctx.moveTo(mapper.toX(0), mapper.toY(0));
+             canvas.ctx.lineTo(mapper.toX(vx), mapper.toY(vy));
+             canvas.ctx.stroke();
+             canvas.ctx.beginPath();
+             canvas.ctx.arc(mapper.toX(vx), mapper.toY(vy), 4, 0, Math.PI*2);
+             canvas.ctx.fill();
+           };
+           drawV(x, y, color, 0.25);
+           const t = transform(matrix, x, y);
+           drawV(t.x, t.y, color, 1.0);
+           vecs.push({ label: `v${idx+1}`, x: t.x, y: t.y, color });
+        }
+     });
+     canvas.ctx.globalAlpha = 1.0;
+  } catch(e) {}
+
+  return {
+    title: "Matrix Transforms",
+    legend: vecs.map(v => ({ label: v.label, color: v.color })),
+    indicators: [{ label: "Determinant", value: formatNumber(matrix[0][0]*matrix[1][1] - matrix[0][1]*matrix[1][0]) }],
+    terms: [],
+    cursor: null
+  };
 }
 
 function plotSurface() {
@@ -1616,6 +1809,8 @@ function render() {
       if (state.mode === "polar") result = plotPolar();
       if (state.mode === "semilog") result = plotSemilog();
       if (state.mode === "complex") result = plotComplex();
+      if (state.mode === "calculus") result = plotCalculus();
+      if (state.mode === "matrix") result = plotMatrix();
     }
     
     state.lastData = result;
@@ -2057,6 +2252,17 @@ function resetForMode() {
     els.surfZMin.value = "-5";
     els.surfZMax.value = "5";
   }
+  if (state.mode === "calculus") {
+    els.calculusInput.value = "0.5 * x^3 - 2 * x";
+    els.calculusAction.value = "derivative";
+    els.calcXMin.value = "-5";
+    els.calcXMax.value = "5";
+    els.calcTargetX.value = "1";
+  }
+  if (state.mode === "matrix") {
+    els.matrixInput.value = "1, 0.5\n-0.5, 1";
+    els.matrixVectorInput.value = "1, 1, #ef4444\n-1, 1, #1f9bd1\n-1, -1, #f97316\n1, -1, #16a34a";
+  }
   render();
 }
 
@@ -2188,13 +2394,26 @@ els.canvas.addEventListener("click", () => {
     els.surfYMax,
     els.surfZMin,
     els.surfZMax,
+    els.calculusInput,
+    els.calculusAction,
+    els.calcXMin,
+    els.calcXMax,
+    els.calcTargetX,
+    els.matrixInput,
+    els.matrixVectorInput,
   ].forEach((element) => element && element.addEventListener(eventName, render));
 });
 
 let resizeTimer = null;
 window.addEventListener("resize", () => {
   window.clearTimeout(resizeTimer);
-  resizeTimer = window.setTimeout(render, 120);
+  resizeTimer = window.setTimeout(() => {
+    if (state.mode === "surface" && typeof Plotly !== "undefined") {
+      Plotly.Plots.resize(els.plotlyDiv);
+    } else {
+      render();
+    }
+  }, 120);
 });
 
 loadPreferences();

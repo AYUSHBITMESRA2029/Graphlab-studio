@@ -181,6 +181,52 @@ button {
   margin: 4px 0 0;
 }
 
+/* Accordion Categories */
+.category-header {
+  padding: 12px 14px;
+  font-weight: 600;
+  color: var(--label);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 8px;
+  margin-top: 4px;
+  font-size: 0.95rem;
+}
+.category-header:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+.category-header.active {
+  color: var(--brand-bg);
+}
+.category-content {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  margin-left: 14px;
+  border-left: 2px solid var(--line);
+  margin-top: 4px;
+  background: var(--surface);
+  border-radius: 0 8px 8px 0;
+}
+.category-content.active {
+  display: flex;
+}
+.category-icon {
+  font-size: 0.8em;
+  transition: transform 0.2s;
+}
+.category-header.active .category-icon {
+  transform: rotate(90deg);
+}
+
 .control-section {
   border-top: 1px solid var(--line);
   display: grid;
