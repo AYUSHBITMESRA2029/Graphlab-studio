@@ -216,6 +216,9 @@ const els = {
   orbitR1: document.getElementById("orbitR1"),
   orbitR2: document.getElementById("orbitR2"),
   solarDays: document.getElementById("solarDays"),
+  quantN: document.getElementById("quantN"),
+  quantL: document.getElementById("quantL"),
+  quantM: document.getElementById("quantM"),
   gravityWellBtn: document.getElementById("gravityWellBtn"),
   plotlyDiv: document.getElementById("plotlyDiv"),
   graphTitle: document.getElementById("graphTitle"),
@@ -2607,6 +2610,193 @@ function plotSolarSystem() {
   };
 }
 
+function evalLaguerre(n, alpha, x) {
+  if (n === 0) return 1;
+  if (n === 1) return 1 + alpha - x;
+  let L0 = 1;
+  let L1 = 1 + alpha - x;
+  let L2 = 0;
+  for (let k = 1; k < n; k++) {
+    L2 = ((2 * k + 1 + alpha - x) * L1 - (k + alpha) * L0) / (k + 1);
+    L0 = L1;
+    L1 = L2;
+  }
+  return L1;
+}
+
+function radialHydrogen(n, l, r) {
+  const rho = (2 * r) / n;
+  const L = evalLaguerre(n - l - 1, 2 * l + 1, rho);
+  return Math.exp(-rho / 2) * Math.pow(rho, l) * L;
+}
+
+function angularHydrogen(l, m, theta, phi) {
+  const am = Math.abs(m);
+  let P = 1;
+  const x = Math.cos(theta);
+  const sinT = Math.sin(theta);
+  
+  if (l === 0) P = 1;
+  else if (l === 1) {
+    if (am === 0) P = x;
+    else if (am === 1) P = sinT;
+  }
+  else if (l === 2) {
+    if (am === 0) P = 3*x*x - 1;
+    else if (am === 1) P = x * sinT;
+    else if (am === 2) P = sinT * sinT;
+  }
+  else if (l === 3) {
+    if (am === 0) P = 5*Math.pow(x,3) - 3*x;
+    else if (am === 1) P = (5*x*x - 1)*sinT;
+    else if (am === 2) P = x * sinT * sinT;
+    else if (am === 3) P = Math.pow(sinT, 3);
+  }
+  else if (l === 4) {
+    if (am === 0) P = 35*Math.pow(x,4) - 30*x*x + 3;
+    else if (am === 1) P = x * (7*x*x - 3) * sinT;
+    else if (am === 2) P = (7*x*x - 1) * sinT * sinT;
+    else if (am === 3) P = x * Math.pow(sinT, 3);
+    else if (am === 4) P = Math.pow(sinT, 4);
+  }
+
+  let phiPart = 1;
+  if (m > 0) phiPart = Math.cos(m * phi);
+  if (m < 0) phiPart = Math.sin(am * phi);
+  
+  return P * phiPart;
+}
+
+function plotQuantum() {
+  const canvas = setupCanvas();
+  const n = parseInt(els.quantN.value) || 3;
+  const l = parseInt(els.quantL.value) || 0;
+  let m = parseInt(els.quantM.value) || 0;
+  
+  if (l >= n) {
+    els.quantL.value = n - 1;
+    throw new Error(`Azimuthal number (l) must be less than n (${n}).`);
+  }
+  if (Math.abs(m) > l) {
+    els.quantM.value = 0;
+    throw new Error(`Magnetic number (m) must be between -l and +l.`);
+  }
+
+  // Find max density for rejection sampling
+  let maxP = 0;
+  for (let r=0.1; r<n*n*2; r+=0.5) {
+    for (let th=0; th<Math.PI; th+=0.2) {
+      for (let ph=0; ph<Math.PI*2; ph+=0.3) {
+        const R = radialHydrogen(n, l, r);
+        const Y = angularHydrogen(l, m, th, ph);
+        const P = (R * Y) * (R * Y);
+        if (P > maxP) maxP = P;
+      }
+    }
+  }
+
+  // Generate Point Cloud
+  let px = [], py = [], pz = [], pcolor = [];
+  const maxR = n * n * 2.5; 
+  let attempts = 0;
+  while (px.length < 5000 && attempts < 200000) {
+    attempts++;
+    const rr = Math.random() * maxR;
+    const u = Math.random();
+    const v = Math.random();
+    const th = Math.acos(2 * v - 1);
+    const ph = 2 * Math.PI * u;
+    
+    const R = radialHydrogen(n, l, rr);
+    const Y = angularHydrogen(l, m, th, ph);
+    const prob = (R * Y) * (R * Y);
+    
+    if (Math.random() < prob / maxP) {
+      px.push(rr * Math.sin(th) * Math.cos(ph));
+      py.push(rr * Math.sin(th) * Math.sin(ph));
+      pz.push(rr * Math.cos(th));
+      pcolor.push(Y > 0 ? 1 : -1); 
+    }
+  }
+
+  // Draw 3D Plotly Map
+  const trace = {
+    x: px, y: py, z: pz,
+    mode: 'markers',
+    marker: {
+      size: 2,
+      color: pcolor,
+      colorscale: [[0, '#38bdf8'], [1, '#ef4444']],
+      opacity: 0.6,
+      showscale: false
+    },
+    type: 'scatter3d',
+    hoverinfo: 'none'
+  };
+  
+  const layout = {
+    margin: { l: 0, r: 0, b: 0, t: 0 },
+    scene: {
+      xaxis: { title: 'X (a₀)', range: [-maxR, maxR] },
+      yaxis: { title: 'Y (a₀)', range: [-maxR, maxR] },
+      zaxis: { title: 'Z (a₀)', range: [-maxR, maxR] },
+      bgcolor: canvasTheme().plotBg,
+      camera: { eye: {x: 1.5, y: 1.5, z: 1.0} }
+    },
+    paper_bgcolor: canvasTheme().plotBg,
+    font: { color: canvasTheme().text },
+    showlegend: false
+  };
+  
+  if (typeof Plotly !== "undefined") {
+    Plotly.newPlot(els.plotlyDiv, [trace], layout, {responsive: true});
+  }
+
+  // Draw 2D Radial Probability Density P(r) = r^2 * R(r)^2
+  let radData = [];
+  let maxPr = 0;
+  for (let r=0; r<maxR; r+=0.1) {
+    const R = radialHydrogen(n, l, r);
+    const prob = r * r * R * R;
+    if (prob > maxPr) maxPr = prob;
+    radData.push({r, prob});
+  }
+
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, 0, maxR, 0, maxPr * 1.1);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Distance r (a₀)", yLabel: "Radial Probability Density P(r)"});
+  
+  canvas.ctx.beginPath();
+  let first = true;
+  let cursorPoints = [];
+  radData.forEach(pt => {
+    const mx = mapper.toX(pt.r);
+    const my = mapper.toY(pt.prob);
+    if (first) { canvas.ctx.moveTo(mx, my); first = false; }
+    else canvas.ctx.lineTo(mx, my);
+    cursorPoints.push({x: pt.r, y: pt.prob, label: `r=${formatNumber(pt.r)}`});
+  });
+  canvas.ctx.strokeStyle = "#10b981"; 
+  canvas.ctx.lineWidth = 3;
+  canvas.ctx.stroke();
+  
+  // Fill under curve
+  canvas.ctx.lineTo(mapper.toX(maxR), mapper.toY(0));
+  canvas.ctx.lineTo(mapper.toX(0), mapper.toY(0));
+  canvas.ctx.fillStyle = "rgba(16, 185, 129, 0.2)";
+  canvas.ctx.fill();
+
+  return {
+    title: `Hydrogen Orbital: n=${n}, l=${l}, m=${m}`,
+    legend: [{ label: "Radial Probability P(r)", color: "#10b981" }],
+    indicators: [
+      { label: "State", value: `${n}${['s','p','d','f','g'][l]}` },
+      { label: "Points", value: px.length.toString() }
+    ],
+    terms: [],
+    cursor: { color: "#10b981", points: buildCursorPoints(cursorPoints, mapper) }
+  };
+}
+
 function plotSurface() {
   const expr = els.surfaceInput.value.trim();
   const xMin = Number(els.surfXMin.value) || -5;
@@ -2823,6 +3013,12 @@ function render() {
       els.canvas.style.height = "50%";
       els.plotlyDiv.style.height = "50%";
       result = plotSolarSystem();
+    } else if (state.mode === "quantum") {
+      els.canvas.style.display = "block";
+      els.plotlyDiv.style.display = "block";
+      els.canvas.style.height = "50%";
+      els.plotlyDiv.style.height = "50%";
+      result = plotQuantum();
     } else {
       els.canvas.style.display = "block";
       els.plotlyDiv.style.display = "none";
@@ -3171,6 +3367,9 @@ function collectFields() {
     orbitR1: els.orbitR1.value,
     orbitR2: els.orbitR2.value,
     solarDays: els.solarDays.value,
+    quantN: els.quantN.value,
+    quantL: els.quantL.value,
+    quantM: els.quantM.value,
   };
 }
 
@@ -3263,6 +3462,9 @@ function applyFields(fields = {}) {
   if (fields.orbitR1 !== undefined) els.orbitR1.value = fields.orbitR1;
   if (fields.orbitR2 !== undefined) els.orbitR2.value = fields.orbitR2;
   if (fields.solarDays !== undefined) els.solarDays.value = fields.solarDays;
+  if (fields.quantN !== undefined) els.quantN.value = fields.quantN;
+  if (fields.quantL !== undefined) els.quantL.value = fields.quantL;
+  if (fields.quantM !== undefined) els.quantM.value = fields.quantM;
 }
 
 function restoreHistoryItem(id) {
@@ -3522,6 +3724,11 @@ function resetForMode() {
   if (state.mode === "solarsystem") {
     els.solarDays.value = "0";
   }
+  if (state.mode === "quantum") {
+    els.quantN.value = "3";
+    els.quantL.value = "2";
+    els.quantM.value = "0";
+  }
   render();
 }
 
@@ -3700,6 +3907,9 @@ els.canvas.addEventListener("click", () => {
     els.orbitR1,
     els.orbitR2,
     els.solarDays,
+    els.quantN,
+    els.quantL,
+    els.quantM,
   ].forEach((element) => element && element.addEventListener(eventName, render));
 });
 

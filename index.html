@@ -189,6 +189,15 @@
             </div>
           </div>
           <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
+            ⚛️ Quantum Physics
+            <span class="category-icon">▶</span>
+          </button>
+          <div class="category-content">
+            <div class="segmented" role="tablist">
+              <button class="segment" type="button" data-mode="quantum">Hydrogen Orbitals</button>
+            </div>
+          </div>
+          <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
             📊 Data & Stats
             <span class="category-icon">▶</span>
           </button>
@@ -485,6 +494,14 @@ Output: 001001001010, #16a34a</textarea>
         <section class="control-section mode-fields" data-fields="solarsystem">
           <div class="range-grid">
             <label>Elapsed Time (Days) <input id="solarDays" type="number" value="0" step="10" /></label>
+          </div>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="quantum">
+          <div class="range-grid">
+            <label>Principal (n) <input id="quantN" type="number" value="3" step="1" min="1" max="5" /></label>
+            <label>Azimuthal (l) <input id="quantL" type="number" value="2" step="1" min="0" max="4" /></label>
+            <label>Magnetic (m) <input id="quantM" type="number" value="0" step="1" min="-4" max="4" /></label>
           </div>
         </section>
         <div class="button-row">
