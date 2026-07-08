@@ -2330,6 +2330,8 @@ function plotAI() {
       cursor: { color, points: buildCursorPoints(points, mapper) }
     };
   }
+}
+
 function plotElliptical() {
   const canvas = setupCanvas();
   const e = Number(els.orbitE.value) || 0;
