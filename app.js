@@ -599,12 +599,13 @@ function drawSampleDots(ctx, mapper, finite, color) {
 }
 
 function buildCursorPoints(points, mapper, formatter) {
+  const fmt = formatter || ((p) => p.label || `x=${formatNumber(p.x)}, y=${formatNumber(p.y)}`);
   return points
     .filter((point) => point.x !== null && point.y !== null)
     .map((point, index) => ({
       sx: mapper.toX(point.x),
       sy: mapper.toY(point.y),
-      label: formatter(point, index),
+      label: fmt(point, index),
     }));
 }
 
