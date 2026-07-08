@@ -185,7 +185,7 @@
             <div class="segmented" role="tablist">
               <button class="segment" type="button" data-mode="elliptical">Orbit</button>
               <button class="segment" type="button" data-mode="hohmann">Hohmann</button>
-              <button class="segment" type="button" data-mode="universe">Cosmology</button>
+              <button class="segment" type="button" data-mode="solarsystem">Solar System</button>
             </div>
           </div>
           <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
@@ -482,10 +482,9 @@ Output: 001001001010, #16a34a</textarea>
           </div>
         </section>
 
-        <section class="control-section mode-fields" data-fields="universe">
+        <section class="control-section mode-fields" data-fields="solarsystem">
           <div class="range-grid">
-            <label>Galaxies <input id="cosmoCount" type="number" value="300" step="50" min="50" max="2000" /></label>
-            <label>Hubble Const (H₀) <input id="cosmoH0" type="number" value="70" step="1" /></label>
+            <label>Elapsed Time (Days) <input id="solarDays" type="number" value="0" step="10" /></label>
           </div>
         </section>
         <div class="button-row">

@@ -215,8 +215,7 @@ const els = {
   orbitA: document.getElementById("orbitA"),
   orbitR1: document.getElementById("orbitR1"),
   orbitR2: document.getElementById("orbitR2"),
-  cosmoCount: document.getElementById("cosmoCount"),
-  cosmoH0: document.getElementById("cosmoH0"),
+  solarDays: document.getElementById("solarDays"),
   gravityWellBtn: document.getElementById("gravityWellBtn"),
   plotlyDiv: document.getElementById("plotlyDiv"),
   graphTitle: document.getElementById("graphTitle"),
@@ -2491,103 +2490,120 @@ function plotHohmann() {
   };
 }
 
-function plotUniverse() {
+function plotSolarSystem() {
   const canvas = setupCanvas();
-  const count = Number(els.cosmoCount.value) || 300;
-  const H0 = Number(els.cosmoH0.value) || 70; // km/s/Mpc
+  const days = Number(els.solarDays.value) || 0;
   
-  if (count < 50 || count > 2000) throw new Error("Galaxy count must be between 50 and 2000");
-  if (H0 <= 0) throw new Error("Hubble constant must be positive");
+  const planets = [
+    { name: "Mercury", a: 0.387, period: 88, color: "#9ca3af" },
+    { name: "Venus", a: 0.723, period: 224.7, color: "#fef08a" },
+    { name: "Earth", a: 1.0, period: 365.2, color: "#38bdf8" },
+    { name: "Mars", a: 1.524, period: 687, color: "#f87171" },
+    { name: "Jupiter", a: 5.203, period: 4331, color: "#fb923c" },
+    { name: "Saturn", a: 9.537, period: 10747, color: "#fde047" },
+    { name: "Uranus", a: 19.19, period: 30589, color: "#7dd3fc" },
+    { name: "Neptune", a: 30.07, period: 59800, color: "#2563eb" }
+  ];
 
-  // Generate 3D spherical universe (max distance 1000 Mpc)
-  const maxD = 1000;
-  let x = [], y = [], z = [], text = [], distances = [];
+  // Plotly traces
+  const traces = [];
   
-  for (let i=0; i<count; i++) {
-    // Random point in sphere
-    const u = Math.random();
-    const v = Math.random();
-    const theta = u * 2.0 * Math.PI;
-    const phi = Math.acos(2.0 * v - 1.0);
-    const r = maxD * Math.cbrt(Math.random());
-    
-    const gx = r * Math.sin(phi) * Math.cos(theta);
-    const gy = r * Math.sin(phi) * Math.sin(theta);
-    const gz = r * Math.cos(phi);
-    
-    // Hubble's Law v = H0 * d
-    const velocity = H0 * r;
-    
-    x.push(gx);
-    y.push(gy);
-    z.push(gz);
-    distances.push({d: r, v: velocity});
-    text.push(`Distance: ${formatNumber(r)} Mpc<br>Velocity: ${formatNumber(velocity)} km/s`);
-  }
-
-  // Draw 3D Plotly Map
-  const trace = {
-    x, y, z,
+  // The Sun
+  traces.push({
+    x: [0], y: [0], z: [0],
     mode: 'markers',
-    marker: {
-      size: 3,
-      color: distances.map(d => d.v),
-      colorscale: 'Jet',
-      opacity: 0.8,
-      showscale: true,
-      colorbar: { title: 'Velocity (km/s)' }
-    },
-    text: text,
-    hoverinfo: 'text',
-    type: 'scatter3d'
-  };
-  
+    marker: { size: 12, color: '#facc15' },
+    name: 'Sun',
+    hoverinfo: 'name'
+  });
+
+  planets.forEach(p => {
+    // Generate orbital ring
+    let ox=[], oy=[], oz=[];
+    for (let theta = 0; theta <= Math.PI * 2.01; theta += 0.1) {
+      ox.push(p.a * Math.cos(theta));
+      oy.push(p.a * Math.sin(theta));
+      oz.push(0);
+    }
+    traces.push({
+      x: ox, y: oy, z: oz,
+      mode: 'lines',
+      line: { color: p.color, width: 1, dash: 'dot' },
+      showlegend: false,
+      hoverinfo: 'none'
+    });
+
+    // Current position
+    const angle = (days / p.period) * Math.PI * 2;
+    traces.push({
+      x: [p.a * Math.cos(angle)],
+      y: [p.a * Math.sin(angle)],
+      z: [0],
+      mode: 'markers',
+      marker: { size: 6, color: p.color },
+      name: p.name,
+      text: [`${p.name}<br>Dist: ${p.a} AU<br>v: ${formatNumber(29.78 / Math.sqrt(p.a))} km/s`],
+      hoverinfo: 'text'
+    });
+  });
+
+  const maxA = 35;
   const layout = {
     margin: { l: 0, r: 0, b: 0, t: 0 },
     scene: {
-      xaxis: { title: 'X (Mpc)', range: [-maxD, maxD] },
-      yaxis: { title: 'Y (Mpc)', range: [-maxD, maxD] },
-      zaxis: { title: 'Z (Mpc)', range: [-maxD, maxD] },
-      bgcolor: canvasTheme().plotBg
+      xaxis: { title: 'X (AU)', range: [-maxA, maxA] },
+      yaxis: { title: 'Y (AU)', range: [-maxA, maxA] },
+      zaxis: { title: 'Z (AU)', range: [-maxA, maxA] },
+      bgcolor: canvasTheme().plotBg,
+      camera: { eye: {x: 1.5, y: 1.5, z: 1.0} }
     },
     paper_bgcolor: canvasTheme().plotBg,
-    font: { color: canvasTheme().text }
+    font: { color: canvasTheme().text },
+    showlegend: false
   };
+  
   if (typeof Plotly !== "undefined") {
-    Plotly.newPlot(els.plotlyDiv, [trace], layout, {responsive: true});
+    Plotly.newPlot(els.plotlyDiv, traces, layout, {responsive: true});
   }
 
-  // Draw 2D Canvas Hubble Graph
-  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, 0, maxD, 0, maxD * H0 * 1.1);
-  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Distance (Mpc)", yLabel: "Velocity (km/s)"});
+  // Draw 2D Keplerian curve (v = 29.78 / sqrt(r))
+  const maxD = 32;
+  const maxV = 55; // Mercury is ~47.8 km/s
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, 0, maxD, 0, maxV);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Distance from Sun (AU)", yLabel: "Orbital Velocity (km/s)"});
   
-  distances.sort((a,b) => a.d - b.d);
-  
-  // Scatter points
-  canvas.ctx.fillStyle = "#38bdf8";
-  distances.forEach(p => {
-    canvas.ctx.beginPath();
-    canvas.ctx.arc(mapper.toX(p.d), mapper.toY(p.v), 2.5, 0, Math.PI*2);
-    canvas.ctx.fill();
-  });
-  
-  // Trendline
+  // Trendline v = 29.78 / sqrt(r)
   canvas.ctx.beginPath();
-  canvas.ctx.moveTo(mapper.toX(0), mapper.toY(0));
-  canvas.ctx.lineTo(mapper.toX(maxD), mapper.toY(maxD * H0));
-  canvas.ctx.strokeStyle = "#ef4444";
-  canvas.ctx.lineWidth = 3;
+  let first = true;
+  for (let r = 0.2; r <= maxD; r += 0.1) {
+    const v = 29.78 / Math.sqrt(r);
+    if (first) { canvas.ctx.moveTo(mapper.toX(r), mapper.toY(v)); first = false; }
+    else canvas.ctx.lineTo(mapper.toX(r), mapper.toY(v));
+  }
+  canvas.ctx.strokeStyle = "#a855f7"; // purple trendline
+  canvas.ctx.lineWidth = 2;
   canvas.ctx.stroke();
 
+  // Scatter planets
+  let points = [];
+  planets.forEach(p => {
+    const v = 29.78 / Math.sqrt(p.a);
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(p.a), mapper.toY(v), 5, 0, Math.PI*2);
+    canvas.ctx.fillStyle = p.color;
+    canvas.ctx.fill();
+    points.push({x: p.a, y: v, label: p.name});
+  });
+
   return {
-    title: "Observable Universe & Hubble Expansion",
-    legend: [{ label: "Galaxies", color: "#38bdf8" }, { label: `v = ${H0}d (Trendline)`, color: "#ef4444" }],
+    title: "Solar System & Kepler's 3rd Law",
+    legend: [{ label: "Planets", color: "#38bdf8" }, { label: "v ∝ 1/√(r)", color: "#a855f7" }],
     indicators: [
-      { label: "Galaxies mapped", value: count.toString() },
-      { label: "Max Distance", value: `${maxD} Mpc` }
+      { label: "Elapsed Time", value: `${days} Days` },
+      { label: "Earth Orbit", value: `${formatNumber(days/365.2)} Years` }
     ],
     terms: [],
-    cursor: { color: "#ef4444", points: [] } // Cursor not heavily needed for scatter cloud
+    cursor: { color: "#a855f7", points: buildCursorPoints(points, mapper) }
   };
 }
 
@@ -2801,12 +2817,12 @@ function render() {
       els.canvas.style.height = "100%";
       els.plotlyDiv.style.height = "100%";
       result = plotSurface();
-    } else if (state.mode === "universe") {
+    } else if (state.mode === "solarsystem") {
       els.canvas.style.display = "block";
       els.plotlyDiv.style.display = "block";
       els.canvas.style.height = "50%";
       els.plotlyDiv.style.height = "50%";
-      result = plotUniverse();
+      result = plotSolarSystem();
     } else {
       els.canvas.style.display = "block";
       els.plotlyDiv.style.display = "none";
@@ -3154,8 +3170,7 @@ function collectFields() {
     orbitA: els.orbitA.value,
     orbitR1: els.orbitR1.value,
     orbitR2: els.orbitR2.value,
-    cosmoCount: els.cosmoCount.value,
-    cosmoH0: els.cosmoH0.value,
+    solarDays: els.solarDays.value,
   };
 }
 
@@ -3247,8 +3262,7 @@ function applyFields(fields = {}) {
   if (fields.orbitA !== undefined) els.orbitA.value = fields.orbitA;
   if (fields.orbitR1 !== undefined) els.orbitR1.value = fields.orbitR1;
   if (fields.orbitR2 !== undefined) els.orbitR2.value = fields.orbitR2;
-  if (fields.cosmoCount !== undefined) els.cosmoCount.value = fields.cosmoCount;
-  if (fields.cosmoH0 !== undefined) els.cosmoH0.value = fields.cosmoH0;
+  if (fields.solarDays !== undefined) els.solarDays.value = fields.solarDays;
 }
 
 function restoreHistoryItem(id) {
@@ -3303,8 +3317,8 @@ function interpretRequest() {
     recordCurrentGraph();
     return;
   }
-  if (lower.includes("universe") || lower.includes("galaxy") || lower.includes("hubble") || lower.includes("cosmology")) {
-    setMode("universe");
+  if (lower.includes("solar system") || lower.includes("planet") || lower.includes("kepler") || lower.includes("orbit velocity")) {
+    setMode("solarsystem");
     recordCurrentGraph();
     return;
   }
@@ -3505,9 +3519,8 @@ function resetForMode() {
     els.orbitR1.value = "4";
     els.orbitR2.value = "12";
   }
-  if (state.mode === "universe") {
-    els.cosmoCount.value = "300";
-    els.cosmoH0.value = "70";
+  if (state.mode === "solarsystem") {
+    els.solarDays.value = "0";
   }
   render();
 }
@@ -3686,8 +3699,7 @@ els.canvas.addEventListener("click", () => {
     els.orbitA,
     els.orbitR1,
     els.orbitR2,
-    els.cosmoCount,
-    els.cosmoH0,
+    els.solarDays,
   ].forEach((element) => element && element.addEventListener(eventName, render));
 });
 
