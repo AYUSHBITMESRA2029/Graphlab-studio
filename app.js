@@ -2496,90 +2496,336 @@ function plotHohmann() {
   };
 }
 
+let threeSceneState = null;
+
+function clearThreeScene() {
+  if (threeSceneState) {
+    window.removeEventListener('mousemove', threeSceneState.onMouseMove);
+    if (threeSceneState.onDoubleClick) {
+      window.removeEventListener('dblclick', threeSceneState.onDoubleClick);
+    }
+    if (threeSceneState.renderer && els.plotlyDiv.contains(threeSceneState.renderer.domElement)) {
+      els.plotlyDiv.removeChild(threeSceneState.renderer.domElement);
+      threeSceneState.renderer.dispose();
+    }
+    const tooltip = document.getElementById("three-tooltip");
+    if (tooltip) tooltip.style.display = 'none';
+    threeSceneState = null;
+  }
+}
+
 function plotSolarSystem() {
   const canvas = setupCanvas();
   const days = Number(els.solarDays.value) || 0;
+  const tooltip = document.getElementById("three-tooltip");
   
   const planets = [
-    { name: "Mercury", a: 0.387, period: 88, color: "#9ca3af" },
-    { name: "Venus", a: 0.723, period: 224.7, color: "#fef08a" },
-    { name: "Earth", a: 1.0, period: 365.2, color: "#38bdf8" },
-    { name: "Mars", a: 1.524, period: 687, color: "#f87171" },
-    { name: "Jupiter", a: 5.203, period: 4331, color: "#fb923c" },
-    { name: "Saturn", a: 9.537, period: 10747, color: "#fde047" },
-    { name: "Uranus", a: 19.19, period: 30589, color: "#7dd3fc" },
-    { name: "Neptune", a: 30.07, period: 59800, color: "#2563eb" }
+    { name: "Mercury", a: 0.387, period: 88, radius: 2439.7, mass: "3.30×10²³ kg", density: "5.43 g/cm³", g: "3.7 m/s²", color: "#9ca3af", tex: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/mercury.jpg", moons: [] },
+    { name: "Venus", a: 0.723, period: 224.7, radius: 6051.8, mass: "4.87×10²⁴ kg", density: "5.24 g/cm³", g: "8.87 m/s²", color: "#fef08a", tex: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/venus_surface.jpg", moons: [] },
+    { name: "Earth", a: 1.0, period: 365.2, radius: 6371, mass: "5.97×10²⁴ kg", density: "5.51 g/cm³", g: "9.8 m/s²", color: "#38bdf8", tex: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg", moons: [
+      { name: "Moon", a: 0.15, period: 27.3, radius: 1737, color: "#d1d5db" }
+    ] },
+    { name: "Mars", a: 1.524, period: 687, radius: 3389.5, mass: "6.42×10²³ kg", density: "3.93 g/cm³", g: "3.71 m/s²", color: "#f87171", tex: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/mars_1k_color.jpg", moons: [
+      { name: "Phobos", a: 0.1, period: 0.3, radius: 11, color: "#9ca3af" },
+      { name: "Deimos", a: 0.18, period: 1.2, radius: 6, color: "#d1d5db" }
+    ] },
+    { name: "Jupiter", a: 5.203, period: 4331, radius: 69911, mass: "1.90×10²⁷ kg", density: "1.33 g/cm³", g: "24.79 m/s²", color: "#fb923c", tex: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/jupiter.jpg", moons: [
+      { name: "Io", a: 0.4, period: 1.76, radius: 1821, color: "#fef08a" },
+      { name: "Europa", a: 0.6, period: 3.55, radius: 1560, color: "#bae6fd" },
+      { name: "Ganymede", a: 0.9, period: 7.15, radius: 2634, color: "#9ca3af" },
+      { name: "Callisto", a: 1.3, period: 16.68, radius: 2410, color: "#6b7280" }
+    ] },
+    { name: "Saturn", a: 9.537, period: 10747, radius: 58232, mass: "5.68×10²⁶ kg", density: "0.69 g/cm³", g: "10.44 m/s²", color: "#fde047", tex: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/saturn.jpg", moons: [
+      { name: "Titan", a: 1.1, period: 15.9, radius: 2574, color: "#fcd34d" }
+    ] },
+    { name: "Uranus", a: 19.19, period: 30589, radius: 25362, mass: "8.68×10²⁵ kg", density: "1.27 g/cm³", g: "8.69 m/s²", color: "#7dd3fc", tex: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/uranus.jpg", moons: [] },
+    { name: "Neptune", a: 30.07, period: 59800, radius: 24622, mass: "1.02×10²⁶ kg", density: "1.64 g/cm³", g: "11.15 m/s²", color: "#2563eb", tex: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/neptune.jpg", moons: [] }
   ];
 
-  // Plotly traces
-  const traces = [];
-  
-  // The Sun
-  traces.push({
-    x: [0], y: [0], z: [0],
-    mode: 'markers',
-    marker: { size: 12, color: '#facc15' },
-    name: 'Sun',
-    hoverinfo: 'name'
-  });
-
-  planets.forEach(p => {
-    // Generate orbital ring
-    let ox=[], oy=[], oz=[];
-    for (let theta = 0; theta <= Math.PI * 2.01; theta += 0.1) {
-      ox.push(p.a * Math.cos(theta));
-      oy.push(p.a * Math.sin(theta));
-      oz.push(0);
+  // Initialize Three.js if not already running
+  if (!threeSceneState && typeof THREE !== "undefined") {
+    if (typeof Plotly !== "undefined") Plotly.purge(els.plotlyDiv);
+    els.plotlyDiv.innerHTML = '';
+    
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, els.plotlyDiv.offsetWidth / els.plotlyDiv.offsetHeight, 0.1, 2000);
+    camera.position.set(0, 30, 50);
+    
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(els.plotlyDiv.offsetWidth, els.plotlyDiv.offsetHeight);
+    renderer.domElement.style.position = "absolute";
+    renderer.domElement.style.top = "0";
+    renderer.domElement.style.left = "0";
+    els.plotlyDiv.style.position = "relative";
+    els.plotlyDiv.appendChild(renderer.domElement);
+    
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    
+    // Crucial fix: re-render the scene whenever OrbitControls changes (dragging/zooming)
+    controls.addEventListener('change', () => {
+      if (threeSceneState && !window.animationFrameId) {
+        if (threeSceneState.followedObject) {
+          const targetPos = new THREE.Vector3();
+          threeSceneState.followedObject.getWorldPosition(targetPos);
+          threeSceneState.controls.target.copy(targetPos);
+        }
+        threeSceneState.renderer.render(threeSceneState.scene, threeSceneState.camera);
+      }
+    });
+    
+    // Starry background
+    const starGeo = new THREE.BufferGeometry();
+    const starPts = [];
+    for(let i=0;i<1000;i++) {
+      const u = Math.random(); const v = Math.random();
+      const th = u * 2 * Math.PI; const ph = Math.acos(2*v - 1);
+      const r = 100 + Math.random() * 50;
+      starPts.push(r * Math.sin(ph) * Math.cos(th), r * Math.sin(ph) * Math.sin(th), r * Math.cos(ph));
     }
-    traces.push({
-      x: ox, y: oy, z: oz,
-      mode: 'lines',
-      line: { color: p.color, width: 1, dash: 'dot' },
-      showlegend: false,
-      hoverinfo: 'none'
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPts, 3));
+    const starMat = new THREE.PointsMaterial({color: 0xffffff, size: 0.2});
+    scene.add(new THREE.Points(starGeo, starMat));
+
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    
+    // Sun
+    const sunGeo = new THREE.SphereGeometry(1.5, 32, 32);
+    const sunMat = new THREE.MeshBasicMaterial({ color: 0xffea00 }); // bright yellow
+    const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+    sunMesh.userData = { name: "Sun", a: 0, radius: 696340, mass: "1.989×10³⁰ kg", density: "1.41 g/cm³", g: "274 m/s²" };
+    scene.add(sunMesh);
+
+    // Sun Glow Aura
+    const glowGeo = new THREE.SphereGeometry(1.8, 32, 32);
+    const glowMat = new THREE.MeshBasicMaterial({ 
+      color: 0xffaa00, 
+      transparent: true, 
+      opacity: 0.4, 
+      blending: THREE.AdditiveBlending 
+    });
+    const sunGlow = new THREE.Mesh(glowGeo, glowMat);
+    scene.add(sunGlow);
+    
+    // Dramatic Sunlight
+    const pointLight = new THREE.PointLight(0xffffff, 2.5, 300);
+    scene.add(pointLight);
+    // Very dim ambient light so the dark side of planets is actually dark!
+    scene.add(new THREE.AmbientLight(0x111111));
+
+    // Distance scaling factor so planets don't clip into the Sun
+    const dScale = 5;
+
+    // Asteroid Belt (Between Mars and Jupiter)
+    const astGeo = new THREE.BufferGeometry();
+    const astPts = [];
+    for(let i=0; i<3000; i++) {
+      const a = (2.2 + Math.random() * 1.5) * dScale; 
+      const theta = Math.random() * Math.PI * 2;
+      const y = (Math.random() - 0.5) * 0.3; 
+      astPts.push(a * Math.cos(theta), y, a * Math.sin(theta));
+    }
+    astGeo.setAttribute('position', new THREE.Float32BufferAttribute(astPts, 3));
+    const astMat = new THREE.PointsMaterial({color: 0x9ca3af, size: 0.05});
+    const asteroidBelt = new THREE.Points(astGeo, astMat);
+    scene.add(asteroidBelt);
+
+    const meshes = [];
+    const moonMeshes = [];
+
+    planets.forEach((p, i) => {
+      const scaledR = Math.max(0.15, (p.radius / 6371) * 0.4);
+      const finalR = Math.min(scaledR, 0.8);
+      
+      const geo = new THREE.SphereGeometry(finalR, 32, 32);
+      
+      // Start with a fallback color
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(p.color),
+        roughness: 0.8,
+        metalness: 0.05
+      });
+      
+      // Asynchronously load texture to avoid black spheres if it takes time
+      if (p.tex) {
+        loader.load(p.tex, (texture) => {
+          mat.map = texture;
+          mat.color = new THREE.Color(0xffffff); // Remove tint once loaded
+          mat.needsUpdate = true;
+        });
+      }
+
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.userData = { ...p };
+      scene.add(mesh);
+      meshes.push(mesh);
+      
+      // Saturn's Rings
+      if (p.name === "Saturn") {
+        const ringGeo = new THREE.RingGeometry(finalR * 1.4, finalR * 2.3, 64);
+        const ringMat = new THREE.MeshStandardMaterial({ 
+          color: 0xd4d4d8, 
+          side: THREE.DoubleSide, 
+          transparent: true, 
+          opacity: 0.8,
+          roughness: 0.6
+        });
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+        ringMesh.rotation.x = Math.PI / 2 - 0.45; // 26-degree tilt
+        
+        // Try to load ring texture if possible, otherwise solid color is fine
+        loader.load("https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/saturn_ring_alpha.png", (tex) => {
+          ringMat.map = tex;
+          ringMat.needsUpdate = true;
+        });
+
+        mesh.add(ringMesh);
+      }
+
+      // Orbit Ring
+      const ringGeo = new THREE.BufferGeometry();
+      const ringPts = [];
+      for(let t=0; t<=Math.PI*2; t+=0.1) {
+        ringPts.push(p.a * dScale * Math.cos(t), 0, p.a * dScale * Math.sin(t));
+      }
+      // Close the loop exactly
+      ringPts.push(p.a * dScale * Math.cos(0), 0, p.a * dScale * Math.sin(0));
+      
+      ringGeo.setAttribute('position', new THREE.Float32BufferAttribute(ringPts, 3));
+      const orbitLineMat = new THREE.LineBasicMaterial({color: 0x555555, transparent: true, opacity: 0.5});
+      scene.add(new THREE.Line(ringGeo, orbitLineMat));
+
+      // Add Moons
+      if (p.moons) {
+        p.moons.forEach(m => {
+          const mGeo = new THREE.SphereGeometry(Math.max(0.04, (m.radius / 6371) * 0.4), 16, 16);
+          const mMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(m.color), roughness: 0.9 });
+          const mMesh = new THREE.Mesh(mGeo, mMat);
+          mMesh.userData = { isMoon: true, ...m };
+          mesh.add(mMesh);
+          moonMeshes.push(mMesh);
+        });
+      }
     });
 
-    // Current position
-    const angle = (days / p.period) * Math.PI * 2;
-    traces.push({
-      x: [p.a * Math.cos(angle)],
-      y: [p.a * Math.sin(angle)],
-      z: [0],
-      mode: 'markers',
-      marker: { size: 6, color: p.color },
-      name: p.name,
-      text: [`${p.name}<br>Dist: ${p.a} AU<br>v: ${formatNumber(29.78 / Math.sqrt(p.a))} km/s`],
-      hoverinfo: 'text'
-    });
-  });
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
 
-  const maxA = 35;
-  const layout = {
-    uirevision: 'true',
-    margin: { l: 0, r: 0, b: 0, t: 0 },
-    scene: {
-      xaxis: { title: 'X (AU)', range: [-maxA, maxA] },
-      yaxis: { title: 'Y (AU)', range: [-maxA, maxA] },
-      zaxis: { title: 'Z (AU)', range: [-maxA, maxA] },
-      bgcolor: canvasTheme().plotBg,
-      camera: { eye: {x: 1.5, y: 1.5, z: 1.0} }
-    },
-    paper_bgcolor: canvasTheme().plotBg,
-    font: { color: canvasTheme().text },
-    showlegend: false
-  };
-  
-  if (typeof Plotly !== "undefined") {
-    Plotly.react(els.plotlyDiv, traces, layout);
+    const onMouseMove = (event) => {
+      const tt = document.getElementById("three-tooltip");
+      if (!els.plotlyDiv) return;
+      const rect = els.plotlyDiv.getBoundingClientRect();
+      
+      // If mouse is outside the 3D canvas, hide tooltip and ignore
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+        if (tt) tt.style.display = 'none';
+        return;
+      }
+      
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycaster.setFromCamera(mouse, camera);
+      
+      // Check intersection with sun, planets, and moons
+      const allObjects = [sunMesh, ...meshes, ...moonMeshes];
+      const intersects = raycaster.intersectObjects(allObjects, false);
+      
+      if (intersects.length > 0) {
+        const d = intersects[0].object.userData;
+        if (tt) {
+          tt.style.display = 'block';
+          tt.style.left = (event.clientX + 15) + 'px';
+          tt.style.top = (event.clientY + 15) + 'px';
+          tt.innerHTML = `
+            <strong>${d.name}</strong><br>
+            <span style="color:#888; font-size:11px;">Distance: ${d.a || 0} AU</span><br><br>
+            Radius: ${d.radius ? d.radius.toLocaleString() : '?'} km<br>
+            ${d.mass ? `Mass: ${d.mass}<br>` : ''}
+            ${d.density ? `Density: ${d.density}<br>` : ''}
+            ${d.g ? `Gravity: ${d.g}` : ''}
+            <span style="color:#a855f7; font-size:11px; margin-top:5px; display:block;">Double-click to focus</span>
+          `;
+        }
+      } else {
+        if (tt) tt.style.display = 'none';
+      }
+    };
+    
+    // Use window listener to guarantee we catch mouse movements
+    window.addEventListener('mousemove', onMouseMove);
+
+    const onDoubleClick = (event) => {
+      if (!els.plotlyDiv) return;
+      const rect = els.plotlyDiv.getBoundingClientRect();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
+      
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      
+      const allObjects = [sunMesh, ...meshes, ...moonMeshes];
+      const intersects = raycaster.intersectObjects(allObjects, false);
+      if (intersects.length > 0) {
+        if (threeSceneState) threeSceneState.followedObject = intersects[0].object;
+      } else {
+        if (threeSceneState) threeSceneState.followedObject = sunMesh;
+      }
+    };
+    window.addEventListener('dblclick', onDoubleClick);
+
+    window.addEventListener('resize', () => {
+      if (threeSceneState && threeSceneState.camera) {
+        threeSceneState.camera.aspect = els.plotlyDiv.offsetWidth / els.plotlyDiv.offsetHeight;
+        threeSceneState.camera.updateProjectionMatrix();
+        threeSceneState.renderer.setSize(els.plotlyDiv.offsetWidth, els.plotlyDiv.offsetHeight);
+      }
+    });
+
+    threeSceneState = { scene, camera, renderer, controls, meshes, moonMeshes, onMouseMove, onDoubleClick, followedObject: sunMesh };
+    
+    // Initial Render
+    threeSceneState.renderer.render(threeSceneState.scene, threeSceneState.camera);
   }
 
-  // Draw 2D Keplerian curve (v = 29.78 / sqrt(r))
+  // Update positions based on Days
+  if (threeSceneState) {
+    const dScale = 5;
+    threeSceneState.meshes.forEach(mesh => {
+      const p = mesh.userData;
+      const angle = (days / p.period) * Math.PI * 2;
+      mesh.position.set(p.a * dScale * Math.cos(angle), 0, p.a * dScale * Math.sin(angle));
+      mesh.rotation.y += 0.02; // Rotate on axis
+      
+      // Animate child moons
+      mesh.children.forEach(moonMesh => {
+        if (moonMesh.userData.isMoon) {
+          const m = moonMesh.userData;
+          const mAngle = (days / m.period) * Math.PI * 2;
+          // Scale moon distance slightly so it stays outside the planet
+          const mScale = 3.0; 
+          moonMesh.position.set(m.a * mScale * Math.cos(mAngle), 0, m.a * mScale * Math.sin(mAngle));
+        }
+      });
+    });
+
+    if (threeSceneState.followedObject) {
+      const targetPos = new THREE.Vector3();
+      threeSceneState.followedObject.getWorldPosition(targetPos);
+      threeSceneState.controls.target.copy(targetPos);
+    }
+
+    threeSceneState.controls.update();
+    threeSceneState.renderer.render(threeSceneState.scene, threeSceneState.camera);
+  }
+
+  // Draw 2D Keplerian curve
   const maxD = 32;
-  const maxV = 55; // Mercury is ~47.8 km/s
+  const maxV = 55;
   const mapper = createMapper(canvas.width, canvas.height, canvas.pad, 0, maxD, 0, maxV);
   drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Distance from Sun (AU)", yLabel: "Orbital Velocity (km/s)"});
   
-  // Trendline v = 29.78 / sqrt(r)
   canvas.ctx.beginPath();
   let first = true;
   for (let r = 0.2; r <= maxD; r += 0.1) {
@@ -2587,20 +2833,22 @@ function plotSolarSystem() {
     if (first) { canvas.ctx.moveTo(mapper.toX(r), mapper.toY(v)); first = false; }
     else canvas.ctx.lineTo(mapper.toX(r), mapper.toY(v));
   }
-  canvas.ctx.strokeStyle = "#a855f7"; // purple trendline
+  canvas.ctx.strokeStyle = "#a855f7"; 
   canvas.ctx.lineWidth = 2;
   canvas.ctx.stroke();
 
-  // Scatter planets
   let points = [];
-  planets.forEach(p => {
-    const v = 29.78 / Math.sqrt(p.a);
-    canvas.ctx.beginPath();
-    canvas.ctx.arc(mapper.toX(p.a), mapper.toY(v), 5, 0, Math.PI*2);
-    canvas.ctx.fillStyle = p.color;
-    canvas.ctx.fill();
-    points.push({x: p.a, y: v, label: `${p.name} (${p.a} AU)`});
-  });
+  if (threeSceneState) {
+    threeSceneState.meshes.forEach(mesh => {
+      const p = mesh.userData;
+      const v = 29.78 / Math.sqrt(p.a);
+      canvas.ctx.beginPath();
+      canvas.ctx.arc(mapper.toX(p.a), mapper.toY(v), 5, 0, Math.PI*2);
+      canvas.ctx.fillStyle = p.color;
+      canvas.ctx.fill();
+      points.push({x: p.a, y: v, label: `${p.name} (${p.a} AU)`});
+    });
+  }
 
   return {
     title: "Solar System & Kepler's 3rd Law",
@@ -3021,6 +3269,11 @@ function render() {
   try {
     savePreferences();
     els.canvasError.hidden = true;
+    
+    if (state.mode !== "solarsystem") {
+      clearThreeScene();
+    }
+    
     if (state.mode === "surface") {
       els.canvas.style.display = "none";
       els.plotlyDiv.style.display = "block";

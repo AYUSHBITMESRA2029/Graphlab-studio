@@ -14,8 +14,12 @@
     <link rel="apple-touch-icon" href="icon-180.png" />
     <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   </head>
   <body>
+    <div id="three-tooltip" style="position:absolute; background:rgba(0,0,0,0.85); color:#fff; border: 1px solid #38bdf8; border-radius: 4px; padding:10px; display:none; pointer-events:none; z-index:9999; font-family: 'Segoe UI', sans-serif; font-size: 13px; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.5);"></div>
     <div id="splashScreen" class="splash-screen">
       <div class="splash-logo">GraphLab</div>
       <div class="splash-quote">"Where equations come to life."</div>
