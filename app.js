@@ -211,6 +211,14 @@ const els = {
   aiType: document.getElementById("aiType"),
   aiLR: document.getElementById("aiLR"),
   aiW0: document.getElementById("aiW0"),
+  orbitType: document.getElementById("orbitType"),
+  orbitE: document.getElementById("orbitE"),
+  orbitA: document.getElementById("orbitA"),
+  orbitR1: document.getElementById("orbitR1"),
+  orbitR2: document.getElementById("orbitR2"),
+  orbitEllipticalFields: document.getElementById("orbitEllipticalFields"),
+  orbitHohmannFields: document.getElementById("orbitHohmannFields"),
+  gravityWellBtn: document.getElementById("gravityWellBtn"),
   plotlyDiv: document.getElementById("plotlyDiv"),
   graphTitle: document.getElementById("graphTitle"),
   modeEyebrow: document.getElementById("modeEyebrow"),
@@ -1153,7 +1161,9 @@ function plotBar() {
     ctx.fillRect(x, y, barWidth, h);
     ctx.fillStyle = theme.axis;
     ctx.font = "700 12px Segoe UI, sans-serif";
-    ctx.fillText(formatNumber(bar.value), x, y - 8);
+    ctx.textAlign = "center";
+    ctx.fillText(formatNumber(bar.value), mapper.toX(index), y - 8);
+    ctx.textAlign = "left"; // restore
     ctx.save();
     ctx.translate(mapper.toX(index), canvas.height - canvas.pad + 34);
     ctx.rotate(-Math.PI / 8);
@@ -1935,7 +1945,7 @@ function plotKinematics() {
 
   const range = vx * t_flight;
   const t_top = g > 0 ? vy / g : 0;
-  const H = g > 0 ? h0 + (vy*vy) / (2*g) : h0 + vy;
+  const H = (g > 0 && vy > 0) ? h0 + (vy*vy) / (2*g) : h0;
 
   let points = [];
   const steps = 200;
@@ -1946,11 +1956,11 @@ function plotKinematics() {
     if (y >= 0) points.push({x, y});
   }
 
-  const padding = range * 0.1 || 1;
-  const xMin = -padding;
+  const padding = Math.max(1, range * 0.1);
+  const xMin = Math.min(-padding, 0);
   const xMax = range + padding;
-  const yMin = 0;
-  const yMax = H + padding;
+  const yMin = Math.min(0, h0);
+  const yMax = H + Math.max(1, H * 0.1);
 
   const mapper = createMapper(canvas.width, canvas.height, canvas.pad, xMin, xMax, yMin, yMax);
   drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Distance (m)", yLabel: "Height (m)"});
@@ -2076,12 +2086,18 @@ function plotMechanics() {
   const mapper = createMapper(canvas.width, canvas.height, canvas.pad, minScale, maxScale, -span/2, span/2);
   drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Normal Stress (σ)", yLabel: "Shear Stress (τ)"});
 
-  // Draw Mohr's Circle
+  // Draw Mohr's Circle in coordinate space using ellipse
   canvas.ctx.beginPath();
   const cx = mapper.toX(C);
   const cy = mapper.toY(0);
-  const rx = mapper.toX(C + R) - cx; // Radius in pixels
-  canvas.ctx.arc(cx, cy, Math.abs(rx), 0, Math.PI * 2);
+  const rx = Math.abs(mapper.toX(C + R) - cx);
+  const ry = Math.abs(mapper.toY(R) - cy);
+  if (typeof canvas.ctx.ellipse === 'function') {
+    canvas.ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  } else {
+    // Fallback for very old browsers, though ellipse is standard now
+    canvas.ctx.arc(cx, cy, rx, 0, Math.PI * 2); 
+  }
   canvas.ctx.strokeStyle = "#3b82f6";
   canvas.ctx.lineWidth = 2;
   canvas.ctx.stroke();
@@ -2315,6 +2331,162 @@ function plotAI() {
       indicators: [],
       terms: [],
       cursor: { color, points: buildCursorPoints(points, mapper) }
+    };
+  }
+function plotOrbit() {
+  const canvas = setupCanvas();
+  const type = els.orbitType.value;
+
+  if (type === "elliptical") {
+    const e = Number(els.orbitE.value) || 0;
+    const a = Number(els.orbitA.value) || 10;
+    
+    if (e < 0 || e >= 1) throw new Error("Eccentricity must be between 0 and 0.99");
+    if (a <= 0) throw new Error("Semi-major axis must be positive");
+
+    const periapsis = a * (1 - e);
+    const apoapsis = a * (1 + e);
+    const period = 2 * Math.PI * Math.sqrt(Math.pow(a, 3)); // Assume mu = 1
+
+    const maxDist = apoapsis * 1.1;
+    const mapper = createMapper(canvas.width, canvas.height, canvas.pad, -maxDist, maxDist, -maxDist, maxDist);
+    drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "x (Distance)", yLabel: "y (Distance)"});
+
+    // Draw central body at focus (0,0)
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(0), mapper.toY(0), 8, 0, Math.PI*2);
+    canvas.ctx.fillStyle = "#facc15";
+    canvas.ctx.fill();
+
+    // Orbit equation: r = a(1-e^2) / (1 + e*cos(theta))
+    let points = [];
+    canvas.ctx.beginPath();
+    for (let theta = 0; theta <= Math.PI*2.01; theta += 0.05) {
+      const r = (a * (1 - e * e)) / (1 + e * Math.cos(theta));
+      const x = r * Math.cos(theta);
+      const y = r * Math.sin(theta);
+      points.push({x, y, label: `r=${formatNumber(r)}`});
+      if (theta === 0) canvas.ctx.moveTo(mapper.toX(x), mapper.toY(y));
+      else canvas.ctx.lineTo(mapper.toX(x), mapper.toY(y));
+    }
+    canvas.ctx.strokeStyle = "#38bdf8";
+    canvas.ctx.lineWidth = 2;
+    canvas.ctx.stroke();
+
+    // Mark Periapsis and Apoapsis
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(periapsis), mapper.toY(0), 5, 0, Math.PI*2);
+    canvas.ctx.fillStyle = "#10b981";
+    canvas.ctx.fill();
+
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(-apoapsis), mapper.toY(0), 5, 0, Math.PI*2);
+    canvas.ctx.fillStyle = "#ef4444";
+    canvas.ctx.fill();
+
+    return {
+      title: "Elliptical Orbit (Kepler's Laws)",
+      legend: [{ label: "Orbit Path", color: "#38bdf8" }, { label: "Central Mass", color: "#facc15" }],
+      indicators: [
+        { label: "Periapsis (Closest)", value: formatNumber(periapsis) },
+        { label: "Apoapsis (Furthest)", value: formatNumber(apoapsis) },
+        { label: "Relative Period", value: formatNumber(period) }
+      ],
+      terms: [],
+      cursor: { color: "#38bdf8", points: buildCursorPoints(points, mapper) }
+    };
+  } else {
+    // Hohmann Transfer
+    const r1 = Number(els.orbitR1.value) || 4;
+    const r2 = Number(els.orbitR2.value) || 12;
+
+    if (r1 <= 0 || r2 <= 0) throw new Error("Radii must be positive.");
+    if (r1 === r2) throw new Error("Radii must be different for a transfer.");
+
+    const r_inner = Math.min(r1, r2);
+    const r_outer = Math.max(r1, r2);
+
+    const a_t = (r_inner + r_outer) / 2;
+    const e_t = (r_outer - r_inner) / (r_outer + r_inner);
+
+    // Assume mu = 1000 for display
+    const mu = 1000;
+    const v1 = Math.sqrt(mu / r1);
+    const v2 = Math.sqrt(mu / r2);
+    const vt1 = Math.sqrt(mu * (2/r1 - 1/a_t));
+    const vt2 = Math.sqrt(mu * (2/r2 - 1/a_t));
+    
+    const dV1 = Math.abs(vt1 - v1);
+    const dV2 = Math.abs(v2 - vt2);
+    const total_dV = dV1 + dV2;
+
+    const maxDist = r_outer * 1.2;
+    const mapper = createMapper(canvas.width, canvas.height, canvas.pad, -maxDist, maxDist, -maxDist, maxDist);
+    drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "x", yLabel: "y"});
+
+    // Central body
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(0), mapper.toY(0), 8, 0, Math.PI*2);
+    canvas.ctx.fillStyle = "#facc15";
+    canvas.ctx.fill();
+
+    const drawCircle = (r, color, dashed=false) => {
+      canvas.ctx.beginPath();
+      for(let t=0; t<=Math.PI*2.01; t+=0.05) {
+        const x = r * Math.cos(t), y = r * Math.sin(t);
+        if(t===0) canvas.ctx.moveTo(mapper.toX(x), mapper.toY(y));
+        else canvas.ctx.lineTo(mapper.toX(x), mapper.toY(y));
+      }
+      canvas.ctx.strokeStyle = color;
+      canvas.ctx.lineWidth = 2;
+      if (dashed) canvas.ctx.setLineDash([5, 5]);
+      canvas.ctx.stroke();
+      canvas.ctx.setLineDash([]);
+    };
+
+    drawCircle(r_inner, "#10b981");
+    drawCircle(r_outer, "#38bdf8");
+
+    // Transfer Orbit: focus at origin. periapsis at +r_inner, apoapsis at -r_outer.
+    let points = [];
+    canvas.ctx.beginPath();
+    for (let theta = 0; theta <= Math.PI; theta += 0.05) {
+      const r = (a_t * (1 - e_t * e_t)) / (1 + e_t * Math.cos(theta));
+      const x = r * Math.cos(theta); // Will go from r_inner to -r_outer
+      const y = r * Math.sin(theta); 
+      points.push({x, y, label: `r=${formatNumber(r)}`});
+      if (theta === 0) canvas.ctx.moveTo(mapper.toX(x), mapper.toY(y));
+      else canvas.ctx.lineTo(mapper.toX(x), mapper.toY(y));
+    }
+    canvas.ctx.strokeStyle = "#f97316"; // Orange transfer
+    canvas.ctx.lineWidth = 3;
+    canvas.ctx.stroke();
+
+    // Mark burn points
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(r_inner), mapper.toY(0), 5, 0, Math.PI*2);
+    canvas.ctx.fillStyle = "#f97316";
+    canvas.ctx.fill();
+
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(-r_outer), mapper.toY(0), 5, 0, Math.PI*2);
+    canvas.ctx.fillStyle = "#f97316";
+    canvas.ctx.fill();
+
+    return {
+      title: "Hohmann Transfer Orbit",
+      legend: [
+        { label: "Inner Orbit", color: "#10b981" },
+        { label: "Outer Orbit", color: "#38bdf8" },
+        { label: "Transfer Path", color: "#f97316" }
+      ],
+      indicators: [
+        { label: "ΔV₁ (Burn 1)", value: formatNumber(dV1) },
+        { label: "ΔV₂ (Burn 2)", value: formatNumber(dV2) },
+        { label: "Total ΔV", value: formatNumber(total_dV) }
+      ],
+      terms: [],
+      cursor: { color: "#f97316", points: buildCursorPoints(points, mapper) }
     };
   }
 }
@@ -2551,6 +2723,7 @@ function render() {
       if (state.mode === "mechanics") result = plotMechanics();
       if (state.mode === "complexity") result = plotComplexity();
       if (state.mode === "ai") result = plotAI();
+      if (state.mode === "orbit") result = plotOrbit();
     }
     
     state.lastData = result;
@@ -2866,6 +3039,11 @@ function collectFields() {
     aiType: els.aiType.value,
     aiLR: els.aiLR.value,
     aiW0: els.aiW0.value,
+    orbitType: els.orbitType.value,
+    orbitE: els.orbitE.value,
+    orbitA: els.orbitA.value,
+    orbitR1: els.orbitR1.value,
+    orbitR2: els.orbitR2.value,
   };
 }
 
@@ -2953,6 +3131,15 @@ function applyFields(fields = {}) {
   if (fields.aiType !== undefined) els.aiType.value = fields.aiType;
   if (fields.aiLR !== undefined) els.aiLR.value = fields.aiLR;
   if (fields.aiW0 !== undefined) els.aiW0.value = fields.aiW0;
+  if (fields.orbitType !== undefined) {
+    els.orbitType.value = fields.orbitType;
+    els.orbitEllipticalFields.style.display = fields.orbitType === "elliptical" ? "grid" : "none";
+    els.orbitHohmannFields.style.display = fields.orbitType === "hohmann" ? "grid" : "none";
+  }
+  if (fields.orbitE !== undefined) els.orbitE.value = fields.orbitE;
+  if (fields.orbitA !== undefined) els.orbitA.value = fields.orbitA;
+  if (fields.orbitR1 !== undefined) els.orbitR1.value = fields.orbitR1;
+  if (fields.orbitR2 !== undefined) els.orbitR2.value = fields.orbitR2;
 }
 
 function restoreHistoryItem(id) {
@@ -2994,6 +3181,23 @@ function interpretRequest() {
   }
   if (lower.includes("gradient descent") || lower.includes("relu") || lower.includes("sigmoid") || lower.includes("activation") || lower.includes("neural") || lower.includes("machine learning")) {
     setMode("ai");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("orbit") || lower.includes("hohmann") || lower.includes("space") || lower.includes("satellite") || lower.includes("kepler")) {
+    setMode("orbit");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("gravity well") || lower.includes("black hole") || lower.includes("spacetime")) {
+    els.surfaceInput.value = "-1 / sqrt(x^2 + y^2)";
+    els.surfXMin.value = "-5";
+    els.surfXMax.value = "5";
+    els.surfYMin.value = "-5";
+    els.surfYMax.value = "5";
+    els.surfZMin.value = "-10";
+    els.surfZMax.value = "0";
+    setMode("surface");
     recordCurrentGraph();
     return;
   }
@@ -3174,6 +3378,15 @@ function resetForMode() {
     els.aiLR.value = "0.1";
     els.aiW0.value = "-8";
   }
+  if (state.mode === "orbit") {
+    els.orbitType.value = "elliptical";
+    els.orbitE.value = "0.6";
+    els.orbitA.value = "10";
+    els.orbitR1.value = "4";
+    els.orbitR2.value = "12";
+    els.orbitEllipticalFields.style.display = "grid";
+    els.orbitHohmannFields.style.display = "none";
+  }
   render();
 }
 
@@ -3224,6 +3437,21 @@ els.historyList.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-history-id]");
   if (!button) return;
   restoreHistoryItem(button.dataset.historyId);
+});
+els.orbitType.addEventListener("change", (e) => {
+  els.orbitEllipticalFields.style.display = e.target.value === "elliptical" ? "grid" : "none";
+  els.orbitHohmannFields.style.display = e.target.value === "hohmann" ? "grid" : "none";
+  render();
+});
+els.gravityWellBtn.addEventListener("click", () => {
+  els.surfaceInput.value = "-1 / sqrt(x^2 + y^2)";
+  els.surfXMin.value = "-5";
+  els.surfXMax.value = "5";
+  els.surfYMin.value = "-5";
+  els.surfYMax.value = "5";
+  els.surfZMin.value = "-10";
+  els.surfZMax.value = "0";
+  render();
 });
 els.cursorSlider.addEventListener("input", (event) => drawCursorAtIndex(Number(event.target.value)));
 els.themeColor.addEventListener("input", (event) => setPreferenceColor("themeColor", event.target.value));
@@ -3337,6 +3565,11 @@ els.canvas.addEventListener("click", () => {
     els.aiType,
     els.aiLR,
     els.aiW0,
+    els.orbitType,
+    els.orbitE,
+    els.orbitA,
+    els.orbitR1,
+    els.orbitR2,
   ].forEach((element) => element && element.addEventListener(eventName, render));
 });
 
