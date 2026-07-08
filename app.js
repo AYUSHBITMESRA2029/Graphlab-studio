@@ -215,6 +215,8 @@ const els = {
   orbitA: document.getElementById("orbitA"),
   orbitR1: document.getElementById("orbitR1"),
   orbitR2: document.getElementById("orbitR2"),
+  cosmoCount: document.getElementById("cosmoCount"),
+  cosmoH0: document.getElementById("cosmoH0"),
   gravityWellBtn: document.getElementById("gravityWellBtn"),
   plotlyDiv: document.getElementById("plotlyDiv"),
   graphTitle: document.getElementById("graphTitle"),
@@ -2489,6 +2491,106 @@ function plotHohmann() {
   };
 }
 
+function plotUniverse() {
+  const canvas = setupCanvas();
+  const count = Number(els.cosmoCount.value) || 300;
+  const H0 = Number(els.cosmoH0.value) || 70; // km/s/Mpc
+  
+  if (count < 50 || count > 2000) throw new Error("Galaxy count must be between 50 and 2000");
+  if (H0 <= 0) throw new Error("Hubble constant must be positive");
+
+  // Generate 3D spherical universe (max distance 1000 Mpc)
+  const maxD = 1000;
+  let x = [], y = [], z = [], text = [], distances = [];
+  
+  for (let i=0; i<count; i++) {
+    // Random point in sphere
+    const u = Math.random();
+    const v = Math.random();
+    const theta = u * 2.0 * Math.PI;
+    const phi = Math.acos(2.0 * v - 1.0);
+    const r = maxD * Math.cbrt(Math.random());
+    
+    const gx = r * Math.sin(phi) * Math.cos(theta);
+    const gy = r * Math.sin(phi) * Math.sin(theta);
+    const gz = r * Math.cos(phi);
+    
+    // Hubble's Law v = H0 * d
+    const velocity = H0 * r;
+    
+    x.push(gx);
+    y.push(gy);
+    z.push(gz);
+    distances.push({d: r, v: velocity});
+    text.push(`Distance: ${formatNumber(r)} Mpc<br>Velocity: ${formatNumber(velocity)} km/s`);
+  }
+
+  // Draw 3D Plotly Map
+  const trace = {
+    x, y, z,
+    mode: 'markers',
+    marker: {
+      size: 3,
+      color: distances.map(d => d.v),
+      colorscale: 'Jet',
+      opacity: 0.8,
+      showscale: true,
+      colorbar: { title: 'Velocity (km/s)' }
+    },
+    text: text,
+    hoverinfo: 'text',
+    type: 'scatter3d'
+  };
+  
+  const layout = {
+    margin: { l: 0, r: 0, b: 0, t: 0 },
+    scene: {
+      xaxis: { title: 'X (Mpc)', range: [-maxD, maxD] },
+      yaxis: { title: 'Y (Mpc)', range: [-maxD, maxD] },
+      zaxis: { title: 'Z (Mpc)', range: [-maxD, maxD] },
+      bgcolor: canvasTheme().plotBg
+    },
+    paper_bgcolor: canvasTheme().plotBg,
+    font: { color: canvasTheme().text }
+  };
+  if (typeof Plotly !== "undefined") {
+    Plotly.newPlot(els.plotlyDiv, [trace], layout, {responsive: true});
+  }
+
+  // Draw 2D Canvas Hubble Graph
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, 0, maxD, 0, maxD * H0 * 1.1);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Distance (Mpc)", yLabel: "Velocity (km/s)"});
+  
+  distances.sort((a,b) => a.d - b.d);
+  
+  // Scatter points
+  canvas.ctx.fillStyle = "#38bdf8";
+  distances.forEach(p => {
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(p.d), mapper.toY(p.v), 2.5, 0, Math.PI*2);
+    canvas.ctx.fill();
+  });
+  
+  // Trendline
+  canvas.ctx.beginPath();
+  canvas.ctx.moveTo(mapper.toX(0), mapper.toY(0));
+  canvas.ctx.lineTo(mapper.toX(maxD), mapper.toY(maxD * H0));
+  canvas.ctx.strokeStyle = "#ef4444";
+  canvas.ctx.lineWidth = 3;
+  canvas.ctx.stroke();
+
+  return {
+    title: "Observable Universe & Hubble Expansion",
+    legend: [{ label: "Galaxies", color: "#38bdf8" }, { label: `v = ${H0}d (Trendline)`, color: "#ef4444" }],
+    indicators: [
+      { label: "Galaxies mapped", value: count.toString() },
+      { label: "Max Distance", value: `${maxD} Mpc` }
+    ],
+    terms: [],
+    cursor: { color: "#ef4444", points: [] } // Cursor not heavily needed for scatter cloud
+  };
+}
+
 function plotSurface() {
   const expr = els.surfaceInput.value.trim();
   const xMin = Number(els.surfXMin.value) || -5;
@@ -2689,17 +2791,27 @@ function setStream(stream) {
 }
 
 function render() {
+  let result = null;
   try {
+    savePreferences();
     els.canvasError.hidden = true;
-    let result;
-    
     if (state.mode === "surface") {
       els.canvas.style.display = "none";
       els.plotlyDiv.style.display = "block";
+      els.canvas.style.height = "100%";
+      els.plotlyDiv.style.height = "100%";
       result = plotSurface();
+    } else if (state.mode === "universe") {
+      els.canvas.style.display = "block";
+      els.plotlyDiv.style.display = "block";
+      els.canvas.style.height = "50%";
+      els.plotlyDiv.style.height = "50%";
+      result = plotUniverse();
     } else {
       els.canvas.style.display = "block";
       els.plotlyDiv.style.display = "none";
+      els.canvas.style.height = "100%";
+      els.plotlyDiv.style.height = "100%";
       if (typeof Plotly !== "undefined") Plotly.purge(els.plotlyDiv);
       
       if (state.mode === "equation") result = plotEquation();
@@ -3042,6 +3154,8 @@ function collectFields() {
     orbitA: els.orbitA.value,
     orbitR1: els.orbitR1.value,
     orbitR2: els.orbitR2.value,
+    cosmoCount: els.cosmoCount.value,
+    cosmoH0: els.cosmoH0.value,
   };
 }
 
@@ -3133,6 +3247,8 @@ function applyFields(fields = {}) {
   if (fields.orbitA !== undefined) els.orbitA.value = fields.orbitA;
   if (fields.orbitR1 !== undefined) els.orbitR1.value = fields.orbitR1;
   if (fields.orbitR2 !== undefined) els.orbitR2.value = fields.orbitR2;
+  if (fields.cosmoCount !== undefined) els.cosmoCount.value = fields.cosmoCount;
+  if (fields.cosmoH0 !== undefined) els.cosmoH0.value = fields.cosmoH0;
 }
 
 function restoreHistoryItem(id) {
@@ -3184,6 +3300,11 @@ function interpretRequest() {
   }
   if (lower.includes("orbit") || lower.includes("space") || lower.includes("satellite") || lower.includes("kepler")) {
     setMode("elliptical");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("universe") || lower.includes("galaxy") || lower.includes("hubble") || lower.includes("cosmology")) {
+    setMode("universe");
     recordCurrentGraph();
     return;
   }
@@ -3384,6 +3505,10 @@ function resetForMode() {
     els.orbitR1.value = "4";
     els.orbitR2.value = "12";
   }
+  if (state.mode === "universe") {
+    els.cosmoCount.value = "300";
+    els.cosmoH0.value = "70";
+  }
   render();
 }
 
@@ -3561,6 +3686,8 @@ els.canvas.addEventListener("click", () => {
     els.orbitA,
     els.orbitR1,
     els.orbitR2,
+    els.cosmoCount,
+    els.cosmoH0,
   ].forEach((element) => element && element.addEventListener(eventName, render));
 });
 
