@@ -183,7 +183,8 @@
           </button>
           <div class="category-content">
             <div class="segmented" role="tablist">
-              <button class="segment" type="button" data-mode="orbit">Orbits</button>
+              <button class="segment" type="button" data-mode="elliptical">Orbit</button>
+              <button class="segment" type="button" data-mode="hohmann">Hohmann</button>
             </div>
           </div>
           <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
@@ -466,19 +467,15 @@ Output: 001001001010, #16a34a</textarea>
           </div>
         </section>
 
-        <section class="control-section mode-fields" data-fields="orbit">
-          <label for="orbitType">Orbital Maneuver</label>
-          <select id="orbitType" class="input-field" style="width:100%; margin-bottom:8px; padding:6px; border-radius:4px; border:1px solid var(--line); background:var(--surface); color:var(--ink);">
-            <option value="elliptical">Elliptical Orbit</option>
-            <option value="hohmann">Hohmann Transfer</option>
-          </select>
-          
-          <div id="orbitEllipticalFields" class="range-grid">
+        <section class="control-section mode-fields" data-fields="elliptical">
+          <div class="range-grid">
             <label>Eccentricity (e) <input id="orbitE" type="number" value="0.6" step="0.05" min="0" max="0.99" /></label>
             <label>Semi-major Axis <input id="orbitA" type="number" value="10" step="1" /></label>
           </div>
+        </section>
 
-          <div id="orbitHohmannFields" class="range-grid" style="display:none;">
+        <section class="control-section mode-fields" data-fields="hohmann">
+          <div class="range-grid">
             <label>Inner Radius (r₁) <input id="orbitR1" type="number" value="4" step="1" /></label>
             <label>Outer Radius (r₂) <input id="orbitR2" type="number" value="12" step="1" /></label>
           </div>
