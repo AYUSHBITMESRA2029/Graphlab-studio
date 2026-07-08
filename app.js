@@ -2390,63 +2390,7 @@ function plotElliptical() {
     cursor: { color: "#38bdf8", points: buildCursorPoints(points, mapper) }
   };
 }
-    const e = Number(els.orbitE.value) || 0;
-    const a = Number(els.orbitA.value) || 10;
-    
-    if (e < 0 || e >= 1) throw new Error("Eccentricity must be between 0 and 0.99");
-    if (a <= 0) throw new Error("Semi-major axis must be positive");
 
-    const periapsis = a * (1 - e);
-    const apoapsis = a * (1 + e);
-    const period = 2 * Math.PI * Math.sqrt(Math.pow(a, 3)); // Assume mu = 1
-
-    const maxDist = apoapsis * 1.1;
-    const mapper = createMapper(canvas.width, canvas.height, canvas.pad, -maxDist, maxDist, -maxDist, maxDist);
-    drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "x (Distance)", yLabel: "y (Distance)"});
-
-    // Draw central body at focus (0,0)
-    canvas.ctx.beginPath();
-    canvas.ctx.arc(mapper.toX(0), mapper.toY(0), 8, 0, Math.PI*2);
-    canvas.ctx.fillStyle = "#facc15";
-    canvas.ctx.fill();
-
-    // Orbit equation: r = a(1-e^2) / (1 + e*cos(theta))
-    let points = [];
-    canvas.ctx.beginPath();
-    for (let theta = 0; theta <= Math.PI*2.01; theta += 0.05) {
-      const r = (a * (1 - e * e)) / (1 + e * Math.cos(theta));
-      const x = r * Math.cos(theta);
-      const y = r * Math.sin(theta);
-      points.push({x, y, label: `r=${formatNumber(r)}`});
-      if (theta === 0) canvas.ctx.moveTo(mapper.toX(x), mapper.toY(y));
-      else canvas.ctx.lineTo(mapper.toX(x), mapper.toY(y));
-    }
-    canvas.ctx.strokeStyle = "#38bdf8";
-    canvas.ctx.lineWidth = 2;
-    canvas.ctx.stroke();
-
-    // Mark Periapsis and Apoapsis
-    canvas.ctx.beginPath();
-    canvas.ctx.arc(mapper.toX(periapsis), mapper.toY(0), 5, 0, Math.PI*2);
-    canvas.ctx.fillStyle = "#10b981";
-    canvas.ctx.fill();
-
-    canvas.ctx.beginPath();
-    canvas.ctx.arc(mapper.toX(-apoapsis), mapper.toY(0), 5, 0, Math.PI*2);
-    canvas.ctx.fillStyle = "#ef4444";
-    canvas.ctx.fill();
-
-    return {
-      title: "Elliptical Orbit (Kepler's Laws)",
-      legend: [{ label: "Orbit Path", color: "#38bdf8" }, { label: "Central Mass", color: "#facc15" }],
-      indicators: [
-        { label: "Periapsis (Closest)", value: formatNumber(periapsis) },
-        { label: "Apoapsis (Furthest)", value: formatNumber(apoapsis) },
-        { label: "Relative Period", value: formatNumber(period) }
-      ],
-      terms: [],
-      cursor: { color: "#38bdf8", points: buildCursorPoints(points, mapper) }
-    };
 function plotHohmann() {
   const canvas = setupCanvas();
   const r1 = Number(els.orbitR1.value) || 4;
