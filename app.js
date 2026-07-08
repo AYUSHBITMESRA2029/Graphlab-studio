@@ -216,6 +216,7 @@ const els = {
   orbitR1: document.getElementById("orbitR1"),
   orbitR2: document.getElementById("orbitR2"),
   solarDays: document.getElementById("solarDays"),
+  solarAnimate: document.getElementById("solarAnimate"),
   quantN: document.getElementById("quantN"),
   quantL: document.getElementById("quantL"),
   quantM: document.getElementById("quantM"),
@@ -459,8 +460,10 @@ function drawGrid(ctx, width, height, pad, mapper, options = {}) {
 
   ctx.fillStyle = theme.axis;
   ctx.font = "700 12px Segoe UI, sans-serif";
-  ctx.fillText(options.xLabel || "x", width - pad + 14, height - pad + 4);
-  ctx.fillText(options.yLabel || "y", pad - 18, pad - 16);
+  ctx.textAlign = "right";
+  ctx.fillText(options.xLabel || "x", width - 10, height - pad - 10);
+  ctx.textAlign = "left";
+  ctx.fillText(options.yLabel || "y", pad, pad - 16);
   ctx.restore();
 }
 
@@ -2552,6 +2555,7 @@ function plotSolarSystem() {
 
   const maxA = 35;
   const layout = {
+    uirevision: 'true',
     margin: { l: 0, r: 0, b: 0, t: 0 },
     scene: {
       xaxis: { title: 'X (AU)', range: [-maxA, maxA] },
@@ -2566,7 +2570,7 @@ function plotSolarSystem() {
   };
   
   if (typeof Plotly !== "undefined") {
-    Plotly.newPlot(els.plotlyDiv, traces, layout, {responsive: true});
+    Plotly.react(els.plotlyDiv, traces, layout);
   }
 
   // Draw 2D Keplerian curve (v = 29.78 / sqrt(r))
@@ -2595,7 +2599,7 @@ function plotSolarSystem() {
     canvas.ctx.arc(mapper.toX(p.a), mapper.toY(v), 5, 0, Math.PI*2);
     canvas.ctx.fillStyle = p.color;
     canvas.ctx.fill();
-    points.push({x: p.a, y: v, label: p.name});
+    points.push({x: p.a, y: v, label: `${p.name} (${p.a} AU)`});
   });
 
   return {
@@ -2773,7 +2777,7 @@ function plotQuantum() {
     const my = mapper.toY(pt.prob);
     if (first) { canvas.ctx.moveTo(mx, my); first = false; }
     else canvas.ctx.lineTo(mx, my);
-    cursorPoints.push({x: pt.r, y: pt.prob, label: `r=${formatNumber(pt.r)}`});
+    cursorPoints.push({x: pt.r, y: pt.prob, label: `r=${formatNumber(pt.r)} a₀`});
   });
   canvas.ctx.strokeStyle = "#10b981"; 
   canvas.ctx.lineWidth = 3;
@@ -2996,6 +3000,22 @@ function setStream(stream) {
   render();
 }
 
+let animationFrameId = null;
+
+function animateSolarSystem() {
+  if (state.mode !== "solarsystem" || !els.solarAnimate.checked) {
+    animationFrameId = null;
+    return;
+  }
+  
+  els.solarDays.value = Number(els.solarDays.value) + 2;
+  render();
+  
+  if (els.solarAnimate.checked && state.mode === "solarsystem") {
+    animationFrameId = requestAnimationFrame(animateSolarSystem);
+  }
+}
+
 function render() {
   let result = null;
   try {
@@ -3052,6 +3072,18 @@ function render() {
     state.lastData = result;
     updateUI(result);
     setupCursorInspector(result.cursor);
+
+    // Trigger animation if enabled
+    if (state.mode === "solarsystem" && els.solarAnimate.checked) {
+      if (!animationFrameId) {
+        animationFrameId = requestAnimationFrame(animateSolarSystem);
+      }
+    } else {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+    }
   } catch (error) {
     const canvas = setupCanvas();
     canvas.ctx.fillStyle = canvasTheme().plotBg;
@@ -3907,6 +3939,7 @@ els.canvas.addEventListener("click", () => {
     els.orbitR1,
     els.orbitR2,
     els.solarDays,
+    els.solarAnimate,
     els.quantN,
     els.quantL,
     els.quantM,
