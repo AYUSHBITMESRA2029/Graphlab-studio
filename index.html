@@ -144,6 +144,38 @@
               <button class="segment" type="button" data-mode="transient">Transient Response</button>
             </div>
           </div>
+          
+          <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
+            ⚙️ Mechanical & Physics
+            <span class="category-icon">▶</span>
+          </button>
+          <div class="category-content">
+            <div class="segmented" role="tablist">
+              <button class="segment" type="button" data-mode="kinematics">Kinematics</button>
+              <button class="segment" type="button" data-mode="mechanics">Mohr's Circle</button>
+            </div>
+          </div>
+
+          <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
+            🔥 Thermodynamics
+            <span class="category-icon">▶</span>
+          </button>
+          <div class="category-content">
+            <div class="segmented" role="tablist">
+              <button class="segment" type="button" data-mode="thermo">PV Diagram</button>
+            </div>
+          </div>
+
+          <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
+            💻 CS & AI
+            <span class="category-icon">▶</span>
+          </button>
+          <div class="category-content">
+            <div class="segmented" role="tablist">
+              <button class="segment" type="button" data-mode="complexity">Big-O</button>
+              <button class="segment" type="button" data-mode="ai">Neural / ML</button>
+            </div>
+          </div>
           <button class="category-header" type="button" onclick="this.classList.toggle('active'); this.nextElementSibling.classList.toggle('active')">
             📊 Data & Stats
             <span class="category-icon">▶</span>
@@ -364,6 +396,61 @@ z2 = 2 * exp(i * pi / 3)
 Data: 011001001110, #38bdf8
 Enable: 000111111000, #f97316
 Output: 001001001010, #16a34a</textarea>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="kinematics">
+          <div class="range-grid">
+            <label>Velocity (m/s) <input id="kinV0" type="number" value="50" step="1" /></label>
+            <label>Angle (deg) <input id="kinAngle" type="number" value="45" step="1" /></label>
+            <label>Gravity (m/s²) <input id="kinGravity" type="number" value="9.81" step="0.1" /></label>
+            <label>Height (m) <input id="kinH0" type="number" value="0" step="1" /></label>
+          </div>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="thermo">
+          <label for="thermoInput">Thermodynamic Cycle (P, V)</label>
+          <textarea id="thermoInput" rows="5">100, 1
+100, 5
+50, 5
+50, 1</textarea>
+          <label style="font-size:0.8rem; color:var(--muted)">Enter P (kPa), V (m³) points line by line. The cycle will automatically close.</label>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="mechanics">
+          <div class="range-grid">
+            <label>σx (MPa) <input id="mechSigX" type="number" value="50" step="5" /></label>
+            <label>σy (MPa) <input id="mechSigY" type="number" value="-10" step="5" /></label>
+            <label>τxy (MPa) <input id="mechTau" type="number" value="40" step="5" /></label>
+          </div>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="complexity">
+          <label>Compare Big-O Complexities</label>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:10px; font-size:0.9rem;">
+            <label style="display:flex; flex-direction:row; align-items:center; gap:5px;"><input type="checkbox" id="compO1" checked /> O(1)</label>
+            <label style="display:flex; flex-direction:row; align-items:center; gap:5px;"><input type="checkbox" id="compOLog" checked /> O(log n)</label>
+            <label style="display:flex; flex-direction:row; align-items:center; gap:5px;"><input type="checkbox" id="compON" checked /> O(n)</label>
+            <label style="display:flex; flex-direction:row; align-items:center; gap:5px;"><input type="checkbox" id="compONLog" checked /> O(n log n)</label>
+            <label style="display:flex; flex-direction:row; align-items:center; gap:5px;"><input type="checkbox" id="compON2" checked /> O(n²)</label>
+            <label style="display:flex; flex-direction:row; align-items:center; gap:5px;"><input type="checkbox" id="compO2N" /> O(2ⁿ)</label>
+          </div>
+          <div class="range-grid">
+            <label>Max Elements (N) <input id="compMaxN" type="number" value="50" step="10" /></label>
+          </div>
+        </section>
+
+        <section class="control-section mode-fields" data-fields="ai">
+          <label for="aiType">Visualization Type</label>
+          <select id="aiType" class="input-field" style="width:100%; margin-bottom:8px; padding:6px; border-radius:4px; border:1px solid var(--line); background:var(--surface); color:var(--ink);">
+            <option value="relu">ReLU Activation</option>
+            <option value="sigmoid">Sigmoid Activation</option>
+            <option value="tanh">Tanh Activation</option>
+            <option value="gradient">Gradient Descent (1D)</option>
+          </select>
+          <div class="range-grid">
+            <label>Learning Rate (α) <input id="aiLR" type="number" value="0.1" step="0.01" /></label>
+            <label>Start Weight (w₀) <input id="aiW0" type="number" value="-8" step="1" /></label>
+          </div>
         </section>
         <div class="button-row">
           <button class="primary-button" id="plotButton" type="button">

@@ -193,6 +193,24 @@ const els = {
   transientAction: document.getElementById("transientAction"),
   transientTMax: document.getElementById("transientTMax"),
   digitalInput: document.getElementById("digitalInput"),
+  kinV0: document.getElementById("kinV0"),
+  kinAngle: document.getElementById("kinAngle"),
+  kinGravity: document.getElementById("kinGravity"),
+  kinH0: document.getElementById("kinH0"),
+  thermoInput: document.getElementById("thermoInput"),
+  mechSigX: document.getElementById("mechSigX"),
+  mechSigY: document.getElementById("mechSigY"),
+  mechTau: document.getElementById("mechTau"),
+  compO1: document.getElementById("compO1"),
+  compOLog: document.getElementById("compOLog"),
+  compON: document.getElementById("compON"),
+  compONLog: document.getElementById("compONLog"),
+  compON2: document.getElementById("compON2"),
+  compO2N: document.getElementById("compO2N"),
+  compMaxN: document.getElementById("compMaxN"),
+  aiType: document.getElementById("aiType"),
+  aiLR: document.getElementById("aiLR"),
+  aiW0: document.getElementById("aiW0"),
   plotlyDiv: document.getElementById("plotlyDiv"),
   graphTitle: document.getElementById("graphTitle"),
   modeEyebrow: document.getElementById("modeEyebrow"),
@@ -1891,6 +1909,416 @@ function plotDigital() {
   };
 }
 
+function plotKinematics() {
+  const canvas = setupCanvas();
+  const v0 = Number(els.kinV0.value) || 0;
+  const angleDeg = Number(els.kinAngle.value) || 0;
+  const g = Number(els.kinGravity.value) || 9.81;
+  const h0 = Number(els.kinH0.value) || 0;
+
+  const angleRad = angleDeg * Math.PI / 180;
+  const vx = v0 * Math.cos(angleRad);
+  const vy = v0 * Math.sin(angleRad);
+
+  // Time of flight: -0.5*g*t^2 + vy*t + h0 = 0
+  let t_flight = 0;
+  if (g > 0) {
+    const discriminant = vy*vy - 4*(-0.5*g)*h0;
+    if (discriminant >= 0) {
+      t_flight = (-vy - Math.sqrt(discriminant)) / (-g);
+      if (t_flight < 0) t_flight = (-vy + Math.sqrt(discriminant)) / (-g); // fallback
+    }
+  } else {
+    if (vy > 0) t_flight = 10; // no gravity, goes on forever
+  }
+  if (t_flight <= 0) t_flight = 1; // fallback
+
+  const range = vx * t_flight;
+  const t_top = g > 0 ? vy / g : 0;
+  const H = g > 0 ? h0 + (vy*vy) / (2*g) : h0 + vy;
+
+  let points = [];
+  const steps = 200;
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * t_flight;
+    const x = vx * t;
+    const y = h0 + vy * t - 0.5 * g * t * t;
+    if (y >= 0) points.push({x, y});
+  }
+
+  const padding = range * 0.1 || 1;
+  const xMin = -padding;
+  const xMax = range + padding;
+  const yMin = 0;
+  const yMax = H + padding;
+
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, xMin, xMax, yMin, yMax);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Distance (m)", yLabel: "Height (m)"});
+
+  canvas.ctx.beginPath();
+  points.forEach((p, i) => {
+    const px = mapper.toX(p.x);
+    const py = mapper.toY(p.y);
+    if (i === 0) canvas.ctx.moveTo(px, py);
+    else canvas.ctx.lineTo(px, py);
+  });
+  canvas.ctx.strokeStyle = "#f97316";
+  canvas.ctx.lineWidth = 3;
+  canvas.ctx.stroke();
+
+  return {
+    title: "Projectile Kinematics",
+    legend: [{ label: "Trajectory", color: "#f97316" }],
+    indicators: [
+      { label: "Range", value: `${formatNumber(range)} m` },
+      { label: "Max Height", value: `${formatNumber(H)} m` },
+      { label: "Time of Flight", value: `${formatNumber(t_flight)} s` }
+    ],
+    terms: [],
+    cursor: { color: "#f97316", points: buildCursorPoints(points, mapper) }
+  };
+}
+
+function plotThermo() {
+  const canvas = setupCanvas();
+  const inputStr = els.thermoInput.value.trim();
+  const lines = inputStr.split('\n').filter(l => l.trim());
+  let points = [];
+  
+  lines.forEach(line => {
+    const parts = line.split(',');
+    if (parts.length >= 2) {
+      points.push({
+        x: Number(parts[1].trim()), // Volume
+        y: Number(parts[0].trim())  // Pressure
+      });
+    }
+  });
+
+  if (points.length < 2) throw new Error("At least 2 points are required for a thermodynamic process.");
+
+  // Close the cycle implicitly
+  const cycle = [...points, points[0]];
+
+  // Calculate Net Work Done (Area = Integral P dV)
+  let work = 0;
+  for (let i = 0; i < points.length; i++) {
+    const p1 = points[i];
+    const p2 = points[(i + 1) % points.length];
+    work += 0.5 * (p1.y + p2.y) * (p2.x - p1.x);
+  }
+
+  let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+  cycle.forEach(p => {
+    xMin = Math.min(xMin, p.x); xMax = Math.max(xMax, p.x);
+    yMin = Math.min(yMin, p.y); yMax = Math.max(yMax, p.y);
+  });
+
+  const dx = (xMax - xMin) || 1;
+  const dy = (yMax - yMin) || 1;
+  
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, xMin - dx*0.2, xMax + dx*0.2, yMin - dy*0.2, yMax + dy*0.2);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Volume V", yLabel: "Pressure P"});
+
+  // Fill area inside
+  canvas.ctx.beginPath();
+  cycle.forEach((p, i) => {
+    if (i === 0) canvas.ctx.moveTo(mapper.toX(p.x), mapper.toY(p.y));
+    else canvas.ctx.lineTo(mapper.toX(p.x), mapper.toY(p.y));
+  });
+  canvas.ctx.fillStyle = "rgba(244, 63, 94, 0.2)";
+  canvas.ctx.fill();
+
+  canvas.ctx.strokeStyle = "#f43f5e";
+  canvas.ctx.lineWidth = 3;
+  canvas.ctx.stroke();
+
+  // Draw points
+  canvas.ctx.fillStyle = "#fff";
+  points.forEach((p, i) => {
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(p.x), mapper.toY(p.y), 5, 0, Math.PI*2);
+    canvas.ctx.fill();
+    canvas.ctx.stroke();
+    canvas.ctx.fillStyle = canvasTheme().axis;
+    canvas.ctx.font = "12px Segoe UI";
+    canvas.ctx.fillText(`State ${i+1}`, mapper.toX(p.x) + 10, mapper.toY(p.y) - 10);
+  });
+
+  return {
+    title: "Thermodynamic P-V Diagram",
+    legend: [{ label: "Cycle Path", color: "#f43f5e" }],
+    indicators: [{ label: "Net Work", value: `${formatNumber(work)}` }],
+    terms: [],
+    cursor: { color: "#f43f5e", points: buildCursorPoints(cycle, mapper) }
+  };
+}
+
+function plotMechanics() {
+  const canvas = setupCanvas();
+  const sigX = Number(els.mechSigX.value) || 0;
+  const sigY = Number(els.mechSigY.value) || 0;
+  const tau = Number(els.mechTau.value) || 0;
+
+  const C = (sigX + sigY) / 2;
+  const R = Math.sqrt(Math.pow((sigX - sigY) / 2, 2) + Math.pow(tau, 2));
+
+  const sig1 = C + R;
+  const sig2 = C - R;
+  const maxShear = R;
+
+  const minScale = Math.min(sig2, sigY) - maxShear*0.5;
+  const maxScale = Math.max(sig1, sigX) + maxShear*0.5;
+  
+  // Make the aspect ratio 1:1 so the circle doesn't squash into an ellipse
+  const span = maxScale - minScale;
+  
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, minScale, maxScale, -span/2, span/2);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Normal Stress (σ)", yLabel: "Shear Stress (τ)"});
+
+  // Draw Mohr's Circle
+  canvas.ctx.beginPath();
+  const cx = mapper.toX(C);
+  const cy = mapper.toY(0);
+  const rx = mapper.toX(C + R) - cx; // Radius in pixels
+  canvas.ctx.arc(cx, cy, Math.abs(rx), 0, Math.PI * 2);
+  canvas.ctx.strokeStyle = "#3b82f6";
+  canvas.ctx.lineWidth = 2;
+  canvas.ctx.stroke();
+  canvas.ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
+  canvas.ctx.fill();
+
+  // Draw connecting line from (sigX, -tau) to (sigY, tau)
+  canvas.ctx.beginPath();
+  canvas.ctx.moveTo(mapper.toX(sigX), mapper.toY(-tau));
+  canvas.ctx.lineTo(mapper.toX(sigY), mapper.toY(tau));
+  canvas.ctx.strokeStyle = "#10b981";
+  canvas.ctx.setLineDash([5, 5]);
+  canvas.ctx.stroke();
+  canvas.ctx.setLineDash([]);
+
+  // Draw center and principal points
+  const drawPoint = (x, y, color, label) => {
+    canvas.ctx.beginPath();
+    canvas.ctx.arc(mapper.toX(x), mapper.toY(y), 4, 0, Math.PI*2);
+    canvas.ctx.fillStyle = color;
+    canvas.ctx.fill();
+    canvas.ctx.fillStyle = canvasTheme().axis;
+    canvas.ctx.font = "12px Segoe UI";
+    canvas.ctx.fillText(label, mapper.toX(x) + 8, mapper.toY(y) - 8);
+  };
+
+  drawPoint(C, 0, "#3b82f6", `C(${formatNumber(C)})`);
+  drawPoint(sig1, 0, "#ef4444", `σ1(${formatNumber(sig1)})`);
+  drawPoint(sig2, 0, "#ef4444", `σ2(${formatNumber(sig2)})`);
+  drawPoint(sigX, -tau, "#10b981", `X(${sigX}, ${-tau})`);
+  drawPoint(sigY, tau, "#10b981", `Y(${sigY}, ${tau})`);
+  drawPoint(C, R, "#f59e0b", `τ_max(${formatNumber(R)})`);
+
+  return {
+    title: "Mohr's Circle for Plane Stress",
+    legend: [
+      { label: "Mohr's Circle", color: "#3b82f6" },
+      { label: "XY State Line", color: "#10b981" },
+      { label: "Principal Stresses", color: "#ef4444" }
+    ],
+    indicators: [
+      { label: "σ1 (Max Principal)", value: `${formatNumber(sig1)}` },
+      { label: "σ2 (Min Principal)", value: `${formatNumber(sig2)}` },
+      { label: "τ_max (Max Shear)", value: `${formatNumber(maxShear)}` }
+    ],
+    terms: [],
+    cursor: null
+  };
+}
+
+function plotComplexity() {
+  const canvas = setupCanvas();
+  const maxN = Math.max(1, Number(els.compMaxN.value) || 50);
+  
+  const drawLine = (fn, color, label) => {
+    let pts = [];
+    for (let n = 1; n <= maxN; n += maxN/100) {
+      const y = fn(n);
+      if (isFinite(y) && y >= 0) pts.push({x: n, y});
+    }
+    return {pts, color, label};
+  };
+
+  const lines = [];
+  if (els.compO1.checked) lines.push(drawLine(() => 1, "#a855f7", "O(1)"));
+  if (els.compOLog.checked) lines.push(drawLine(n => Math.log2(n), "#38bdf8", "O(log n)"));
+  if (els.compON.checked) lines.push(drawLine(n => n, "#10b981", "O(n)"));
+  if (els.compONLog.checked) lines.push(drawLine(n => n * Math.log2(n), "#facc15", "O(n log n)"));
+  if (els.compON2.checked) lines.push(drawLine(n => n * n, "#f97316", "O(n²)"));
+  if (els.compO2N.checked) lines.push(drawLine(n => Math.pow(2, n), "#ef4444", "O(2ⁿ)"));
+
+  if (lines.length === 0) throw new Error("Please select at least one complexity class.");
+
+  let maxY = 0;
+  lines.forEach(l => {
+    l.pts.forEach(p => { if (p.y > maxY && p.x <= maxN) maxY = p.y; });
+  });
+
+  // Cap the Y axis so 2^n doesn't squish everything else if maxN is too large, 
+  // but we still want to show the scale. We'll limit it to 2x the highest non-exponential graph if possible.
+  let reasonableMaxY = 0;
+  lines.forEach(l => {
+    if (l.label !== "O(2ⁿ)") {
+      l.pts.forEach(p => { if (p.y > reasonableMaxY) reasonableMaxY = p.y; });
+    }
+  });
+  if (els.compO2N.checked && reasonableMaxY > 0) {
+    maxY = Math.min(maxY, reasonableMaxY * 3); // don't let 2^n ruin the graph entirely
+  }
+
+  if (maxY <= 0) maxY = 10;
+
+  const mapper = createMapper(canvas.width, canvas.height, canvas.pad, 0, maxN, 0, maxY);
+  drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Elements (N)", yLabel: "Operations"});
+
+  let allCursorPoints = [];
+
+  lines.forEach(line => {
+    canvas.ctx.beginPath();
+    line.pts.forEach((p, i) => {
+      const px = mapper.toX(p.x);
+      const py = mapper.toY(p.y);
+      if (i === 0) canvas.ctx.moveTo(px, py);
+      else canvas.ctx.lineTo(px, py);
+      
+      // Sample a few points for the cursor
+      if (i % 5 === 0) allCursorPoints.push({...p, label: line.label});
+    });
+    canvas.ctx.strokeStyle = line.color;
+    canvas.ctx.lineWidth = 3;
+    canvas.ctx.stroke();
+  });
+
+  allCursorPoints.sort((a, b) => a.x - b.x);
+
+  return {
+    title: "Big-O Time Complexity",
+    legend: lines.map(l => ({ label: l.label, color: l.color })),
+    indicators: [{ label: "Max N", value: maxN.toString() }],
+    terms: [],
+    cursor: { color: "#ffffff", points: buildCursorPoints(allCursorPoints, mapper, p => `N=${formatNumber(p.x)}, Op=${formatNumber(p.y)}`) }
+  };
+}
+
+function plotAI() {
+  const canvas = setupCanvas();
+  const type = els.aiType.value;
+
+  if (type === "gradient") {
+    const lr = Number(els.aiLR.value) || 0.1;
+    let w = Number(els.aiW0.value) || -8;
+    
+    // Loss function L(w) = w^2
+    const lossFn = (w) => w * w;
+    const gradFn = (w) => 2 * w;
+
+    // Background curve
+    const xMin = -10, xMax = 10;
+    const yMin = 0, yMax = 100;
+    const mapper = createMapper(canvas.width, canvas.height, canvas.pad, xMin, xMax, yMin, yMax);
+    drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Weight (w)", yLabel: "Loss L(w)"});
+
+    canvas.ctx.beginPath();
+    for (let x = xMin; x <= xMax; x += 0.2) {
+      if (x === xMin) canvas.ctx.moveTo(mapper.toX(x), mapper.toY(lossFn(x)));
+      else canvas.ctx.lineTo(mapper.toX(x), mapper.toY(lossFn(x)));
+    }
+    canvas.ctx.strokeStyle = canvasTheme().line;
+    canvas.ctx.lineWidth = 2;
+    canvas.ctx.stroke();
+
+    // Gradient Descent steps
+    let points = [];
+    let currentLoss = lossFn(w);
+    points.push({x: w, y: currentLoss, label: "Step 0"});
+    
+    for (let step = 1; step <= 20; step++) {
+      let grad = gradFn(w);
+      w = w - lr * grad;
+      currentLoss = lossFn(w);
+      points.push({x: w, y: currentLoss, label: `Step ${step}`});
+    }
+
+    // Draw steps
+    canvas.ctx.beginPath();
+    points.forEach((p, i) => {
+      if (i === 0) canvas.ctx.moveTo(mapper.toX(p.x), mapper.toY(p.y));
+      else canvas.ctx.lineTo(mapper.toX(p.x), mapper.toY(p.y));
+    });
+    canvas.ctx.strokeStyle = "#38bdf8";
+    canvas.ctx.lineWidth = 2;
+    canvas.ctx.setLineDash([5, 5]);
+    canvas.ctx.stroke();
+    canvas.ctx.setLineDash([]);
+
+    // Draw points
+    points.forEach((p, i) => {
+      canvas.ctx.beginPath();
+      canvas.ctx.arc(mapper.toX(p.x), mapper.toY(p.y), 4, 0, Math.PI*2);
+      canvas.ctx.fillStyle = i === 0 ? "#ef4444" : (i === points.length-1 ? "#10b981" : "#38bdf8");
+      canvas.ctx.fill();
+    });
+
+    return {
+      title: "Gradient Descent Optimization",
+      legend: [{ label: "Loss Surface", color: canvasTheme().line }, { label: "Descent Path", color: "#38bdf8" }],
+      indicators: [
+        { label: "Learning Rate", value: lr.toString() },
+        { label: "Final Loss", value: formatNumber(currentLoss) },
+        { label: "Final w", value: formatNumber(w) }
+      ],
+      terms: [],
+      cursor: { color: "#38bdf8", points: buildCursorPoints(points, mapper) }
+    };
+  } else {
+    // Activation Functions
+    let fn, title, color;
+    if (type === "relu") {
+      fn = x => Math.max(0, x);
+      title = "ReLU Activation";
+      color = "#10b981";
+    } else if (type === "sigmoid") {
+      fn = x => 1 / (1 + Math.exp(-x));
+      title = "Sigmoid Activation";
+      color = "#38bdf8";
+    } else if (type === "tanh") {
+      fn = x => Math.tanh(x);
+      title = "Tanh Activation";
+      color = "#f97316";
+    }
+
+    const xMin = -5, xMax = 5, yMin = -2, yMax = 2;
+    const mapper = createMapper(canvas.width, canvas.height, canvas.pad, xMin, xMax, yMin, yMax);
+    drawGrid(canvas.ctx, canvas.width, canvas.height, canvas.pad, mapper, {xLabel: "Input (x)", yLabel: "Output f(x)"});
+
+    let points = [];
+    canvas.ctx.beginPath();
+    for (let x = xMin; x <= xMax; x += 0.1) {
+      const y = fn(x);
+      points.push({x, y, label: `x=${formatNumber(x)}, y=${formatNumber(y)}`});
+      if (x === xMin) canvas.ctx.moveTo(mapper.toX(x), mapper.toY(y));
+      else canvas.ctx.lineTo(mapper.toX(x), mapper.toY(y));
+    }
+    canvas.ctx.strokeStyle = color;
+    canvas.ctx.lineWidth = 3;
+    canvas.ctx.stroke();
+
+    return {
+      title,
+      legend: [{ label: "f(x)", color }],
+      indicators: [],
+      terms: [],
+      cursor: { color, points: buildCursorPoints(points, mapper) }
+    };
+  }
+}
+
 function plotSurface() {
   const expr = els.surfaceInput.value.trim();
   const xMin = Number(els.surfXMin.value) || -5;
@@ -2118,6 +2546,11 @@ function render() {
       if (state.mode === "bode") result = plotBode();
       if (state.mode === "transient") result = plotTransient();
       if (state.mode === "digital") result = plotDigital();
+      if (state.mode === "kinematics") result = plotKinematics();
+      if (state.mode === "thermo") result = plotThermo();
+      if (state.mode === "mechanics") result = plotMechanics();
+      if (state.mode === "complexity") result = plotComplexity();
+      if (state.mode === "ai") result = plotAI();
     }
     
     state.lastData = result;
@@ -2415,6 +2848,24 @@ function collectFields() {
     transientAction: els.transientAction.value,
     transientTMax: els.transientTMax.value,
     digital: els.digitalInput.value,
+    kinV0: els.kinV0.value,
+    kinAngle: els.kinAngle.value,
+    kinGravity: els.kinGravity.value,
+    kinH0: els.kinH0.value,
+    thermo: els.thermoInput.value,
+    mechSigX: els.mechSigX.value,
+    mechSigY: els.mechSigY.value,
+    mechTau: els.mechTau.value,
+    compO1: els.compO1.checked,
+    compOLog: els.compOLog.checked,
+    compON: els.compON.checked,
+    compONLog: els.compONLog.checked,
+    compON2: els.compON2.checked,
+    compO2N: els.compO2N.checked,
+    compMaxN: els.compMaxN.value,
+    aiType: els.aiType.value,
+    aiLR: els.aiLR.value,
+    aiW0: els.aiW0.value,
   };
 }
 
@@ -2484,6 +2935,24 @@ function applyFields(fields = {}) {
   if (fields.transientAction !== undefined) els.transientAction.value = fields.transientAction;
   if (fields.transientTMax !== undefined) els.transientTMax.value = fields.transientTMax;
   if (fields.digital !== undefined) els.digitalInput.value = fields.digital;
+  if (fields.kinV0 !== undefined) els.kinV0.value = fields.kinV0;
+  if (fields.kinAngle !== undefined) els.kinAngle.value = fields.kinAngle;
+  if (fields.kinGravity !== undefined) els.kinGravity.value = fields.kinGravity;
+  if (fields.kinH0 !== undefined) els.kinH0.value = fields.kinH0;
+  if (fields.thermo !== undefined) els.thermoInput.value = fields.thermo;
+  if (fields.mechSigX !== undefined) els.mechSigX.value = fields.mechSigX;
+  if (fields.mechSigY !== undefined) els.mechSigY.value = fields.mechSigY;
+  if (fields.mechTau !== undefined) els.mechTau.value = fields.mechTau;
+  if (fields.compO1 !== undefined) els.compO1.checked = fields.compO1;
+  if (fields.compOLog !== undefined) els.compOLog.checked = fields.compOLog;
+  if (fields.compON !== undefined) els.compON.checked = fields.compON;
+  if (fields.compONLog !== undefined) els.compONLog.checked = fields.compONLog;
+  if (fields.compON2 !== undefined) els.compON2.checked = fields.compON2;
+  if (fields.compO2N !== undefined) els.compO2N.checked = fields.compO2N;
+  if (fields.compMaxN !== undefined) els.compMaxN.value = fields.compMaxN;
+  if (fields.aiType !== undefined) els.aiType.value = fields.aiType;
+  if (fields.aiLR !== undefined) els.aiLR.value = fields.aiLR;
+  if (fields.aiW0 !== undefined) els.aiW0.value = fields.aiW0;
 }
 
 function restoreHistoryItem(id) {
@@ -2502,6 +2971,33 @@ function interpretRequest() {
   const text = els.promptInput.value.trim();
   if (!text) return;
   const lower = text.toLowerCase();
+  
+  if (lower.includes("kinematic") || lower.includes("projectile") || lower.includes("trajectory")) {
+    setMode("kinematics");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("thermo") || lower.includes("pv diagram") || lower.includes("entropy")) {
+    setMode("thermo");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("mohr") || lower.includes("stress") || lower.includes("mechanics")) {
+    setMode("mechanics");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("complexity") || lower.includes("big o") || lower.includes("big-o")) {
+    setMode("complexity");
+    recordCurrentGraph();
+    return;
+  }
+  if (lower.includes("gradient descent") || lower.includes("relu") || lower.includes("sigmoid") || lower.includes("activation") || lower.includes("neural") || lower.includes("machine learning")) {
+    setMode("ai");
+    recordCurrentGraph();
+    return;
+  }
+  
   if (lower.includes("bode") || lower.includes("frequency response")) {
     setMode("bode");
     recordCurrentGraph();
@@ -2650,6 +3146,34 @@ function resetForMode() {
   if (state.mode === "digital") {
     els.digitalInput.value = "Clock: 101010101010, #64748b\nData: 011001001110, #38bdf8\nEnable: 000111111000, #f97316\nOutput: 001001001010, #16a34a";
   }
+  if (state.mode === "kinematics") {
+    els.kinV0.value = "50";
+    els.kinAngle.value = "45";
+    els.kinGravity.value = "9.81";
+    els.kinH0.value = "0";
+  }
+  if (state.mode === "thermo") {
+    els.thermoInput.value = "100, 1\n100, 5\n50, 5\n50, 1";
+  }
+  if (state.mode === "mechanics") {
+    els.mechSigX.value = "50";
+    els.mechSigY.value = "-10";
+    els.mechTau.value = "40";
+  }
+  if (state.mode === "complexity") {
+    els.compO1.checked = true;
+    els.compOLog.checked = true;
+    els.compON.checked = true;
+    els.compONLog.checked = true;
+    els.compON2.checked = true;
+    els.compO2N.checked = false;
+    els.compMaxN.value = "50";
+  }
+  if (state.mode === "ai") {
+    els.aiType.value = "relu";
+    els.aiLR.value = "0.1";
+    els.aiW0.value = "-8";
+  }
   render();
 }
 
@@ -2795,6 +3319,24 @@ els.canvas.addEventListener("click", () => {
     els.transientAction,
     els.transientTMax,
     els.digitalInput,
+    els.kinV0,
+    els.kinAngle,
+    els.kinGravity,
+    els.kinH0,
+    els.thermoInput,
+    els.mechSigX,
+    els.mechSigY,
+    els.mechTau,
+    els.compO1,
+    els.compOLog,
+    els.compON,
+    els.compONLog,
+    els.compON2,
+    els.compO2N,
+    els.compMaxN,
+    els.aiType,
+    els.aiLR,
+    els.aiW0,
   ].forEach((element) => element && element.addEventListener(eventName, render));
 });
 
